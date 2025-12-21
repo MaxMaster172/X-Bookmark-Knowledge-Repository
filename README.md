@@ -6,7 +6,8 @@ A personal archive system for Twitter/X posts, designed for easy manual capture 
 
 Twitter/X bookmarks are a graveyard of forgotten insights. This repository provides:
 
-- **Manual archiving** - Copy and paste posts you want to remember
+- **Telegram bot** - Share posts directly from X app, never leave the platform
+- **Manual archiving** - Or copy and paste posts when needed
 - **Rich metadata** - Tag, categorize, and annotate your saves
 - **LLM-ready exports** - Formats optimized for use with ChatGPT, Claude, etc.
 - **Simple search** - Find posts by author, topic, tag, or full-text search
@@ -29,6 +30,81 @@ python search.py find "machine learning"
 python export.py llm --topic ai
 ```
 
+## Telegram Bot (Recommended)
+
+The easiest way to archive posts - share directly from the X app without leaving the platform.
+
+### Setup
+
+1. **Create a Telegram Bot**
+   - Message [@BotFather](https://t.me/BotFather) on Telegram
+   - Send `/newbot` and follow the prompts
+   - Copy the API token you receive
+
+2. **Configure and Run**
+   ```bash
+   # Set your bot token
+   export TELEGRAM_BOT_TOKEN='your-bot-token-here'
+
+   # Optional: Restrict to your Telegram user ID only
+   # (Get your ID by messaging @userinfobot)
+   export ALLOWED_TELEGRAM_USERS='123456789'
+
+   # Start the bot
+   python tools/telegram_bot.py
+   ```
+
+3. **Keep it Running**
+   ```bash
+   # Using screen
+   screen -S archive-bot
+   python tools/telegram_bot.py
+   # Ctrl+A, D to detach
+
+   # Or using nohup
+   nohup python tools/telegram_bot.py &
+   ```
+
+### Usage
+
+1. **On X/Twitter**: Tap Share on any post
+2. **Select Telegram**: Share to your archive bot
+3. **Bot fetches the thread**: Including all posts if it's a thread
+4. **Add metadata**: Bot asks for tags, topics, notes, importance
+5. **Done**: Post is archived!
+
+```
+You ───► Share post to Telegram ───► Bot fetches full thread
+                                          │
+                                          ▼
+                                     Bot asks: Tags?
+                                          │
+                                          ▼
+                                     Bot asks: Topics?
+                                          │
+                                          ▼
+                                     Bot asks: Notes?
+                                          │
+                                          ▼
+                                     ✅ Archived!
+```
+
+### Bot Commands
+
+- `/start` - Introduction
+- `/help` - Show help
+- `/stats` - Archive statistics
+- `/recent` - Recently archived posts
+- `/cancel` - Cancel current operation
+
+### Thread Capture
+
+When you share a post that's part of a thread, the bot automatically:
+- Fetches the shared tweet
+- Looks for parent tweets (if it's a reply in the thread)
+- Captures continuation tweets from the same author
+- Combines them into a single archive entry with thread markers
+
 ## Directory Structure
 
 ```
@@ -40,7 +116,9 @@ python export.py llm --topic ai
 │   ├── index.json       # Searchable index
 │   └── tags.json        # Tag taxonomy
 ├── tools/
-│   ├── add_post.py      # Add new posts
+│   ├── telegram_bot.py  # Telegram bot for easy archiving
+│   ├── twitter_fetcher.py # Fetch tweets and threads
+│   ├── add_post.py      # Manual CLI for adding posts
 │   ├── search.py        # Search and retrieve
 │   ├── export.py        # Export for LLM use
 │   └── utils.py         # Shared utilities
