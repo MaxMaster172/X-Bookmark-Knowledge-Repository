@@ -1,4 +1,60 @@
 {
-  "posts": {},
-  "last_updated": null
+  "posts": {
+    "2003030081305039284": {
+      "path": "archive/posts/2025/12/2003030081305039284.md",
+      "author": "iannuttall",
+      "archived_at": "2025-12-23T08:22:07.528963",
+      "tags": [
+        "tutorial",
+        "insight"
+      ],
+      "topics": [
+        "ai",
+        "claude code",
+        "agents"
+      ],
+      "importance": "medium",
+      "is_thread": false
+    },
+    "2003134771149287710": {
+      "path": "archive/posts/2025/12/2003134771149287710.md",
+      "author": "arvidkahl",
+      "archived_at": "2025-12-23T12:08:51.146138",
+      "tags": [
+        "https://x.com/arvidkahl/status/2003134771149287710?s=52&t=51ie2lnee8uc53eklc_rjg"
+      ],
+      "topics": [
+        "ai",
+        "claude code",
+        "agents"
+      ],
+      "is_thread": false
+    },
+    "2002848402749460736": {
+      "path": "archive/posts/2025/12/2002848402749460736.md",
+      "author": "arvidkahl",
+      "archived_at": "2025-12-23T12:09:15.521237",
+      "tags": [],
+      "topics": [],
+      "is_thread": false
+    },
+    "2003019490871869644": {
+      "path": "archive/posts/2025/12/2003019490871869644.md",
+      "author": "aleabitoreddit",
+      "archived_at": "2025-12-23T12:17:05.622677",
+      "tags": [
+        "investing",
+        "semis",
+        "optics"
+      ],
+      "topics": [
+        "investment thesis",
+        "lumentum",
+        "ai datacenters",
+        "optics"
+      ],
+      "is_thread": false
+    }
+  },
+  "last_updated": "2025-12-23T12:17:05.626540"
 }
