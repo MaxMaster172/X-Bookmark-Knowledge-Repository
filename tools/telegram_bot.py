@@ -45,7 +45,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Conversation states
-WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES, SET_IMPORTANCE = range(6)
+WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES = range(5)
 
 # Get bot token from environment
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -279,7 +279,7 @@ async def add_topics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle notes input."""
+    """Handle notes input and save the post."""
     text = update.message.text.strip()
 
     if text.lower() == "/skip":
@@ -287,54 +287,24 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         context.user_data["notes"] = text
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🔵 Low", callback_data="importance_low"),
-            InlineKeyboardButton("🟢 Medium", callback_data="importance_medium"),
-        ],
-        [
-            InlineKeyboardButton("🟡 High", callback_data="importance_high"),
-            InlineKeyboardButton("🔴 Critical", callback_data="importance_critical"),
-        ],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "⭐ *Set Importance*\n\n"
-        "How important is this post to you?",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-    return SET_IMPORTANCE
-
-
-async def set_importance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle importance selection and save the post."""
-    query = update.callback_query
-    await query.answer()
-
-    importance = query.data.replace("importance_", "")
-    context.user_data["importance"] = importance
-
-    await query.edit_message_text("💾 Saving to archive...")
+    await update.message.reply_text("💾 Saving to archive...")
 
     # Save the post
     try:
         file_path = save_archived_post(context.user_data)
         thread = context.user_data["thread"]
 
-        await query.edit_message_text(
+        await update.message.reply_text(
             f"✅ *Archived!*\n\n"
             f"@{thread.author_handle}'s post has been saved.\n\n"
             f"📏 Tags: {', '.join(context.user_data.get('tags', [])) or 'none'}\n"
-            f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}\n"
-            f"⭐ Importance: {importance}\n\n"
+            f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}\n\n"
             f"Send me another link anytime!",
             parse_mode="Markdown"
         )
     except Exception as e:
         logger.error(f"Failed to save post: {e}")
-        await query.edit_message_text(
+        await update.message.reply_text(
             f"❌ Failed to save: {str(e)}\n\n"
             "Please try again or report this issue."
         )
@@ -371,7 +341,6 @@ def save_archived_post(data: dict) -> Path:
         },
         "content": content,
         "archived_at": archived_at.isoformat(),
-        "importance": data.get("importance", "medium"),
         "archived_via": "telegram",
     }
 
@@ -434,7 +403,6 @@ def save_archived_post(data: dict) -> Path:
         "archived_at": archived_at.isoformat(),
         "tags": data.get("tags", []),
         "topics": data.get("topics", []),
-        "importance": data.get("importance", "medium"),
         "is_thread": thread.total_count > 1,
     }
     save_index(index)
@@ -484,7 +452,6 @@ def main():
             ADD_TAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_tags)],
             ADD_TOPICS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_topics)],
             ADD_NOTES: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_notes)],
-            SET_IMPORTANCE: [CallbackQueryHandler(set_importance)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
