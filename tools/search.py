@@ -4,6 +4,7 @@
 import argparse
 import json
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -16,6 +17,47 @@ from utils import (
     ARCHIVE_DIR,
     BASE_DIR,
 )
+
+# Add src to path for embedding imports
+sys.path.insert(0, str(BASE_DIR))
+
+
+def semantic_search(query: str, limit: int = 10) -> List[dict]:
+    """Search posts using semantic similarity."""
+    from src.embeddings.vector_store import get_vector_store
+
+    vector_store = get_vector_store()
+    results = vector_store.search(query, n_results=limit)
+
+    # Convert to format matching keyword search results
+    formatted = []
+    for result in results:
+        # Load full post data for consistent output
+        post_id = result["id"]
+        index = load_index()
+        post_info = index.get("posts", {}).get(post_id, {})
+
+        post_path = BASE_DIR / post_info.get("path", "")
+        if post_path.exists():
+            post = parse_post_file(post_path)
+            formatted.append({
+                "id": post_id,
+                "path": str(post_path),
+                "metadata": post.get("metadata", {}),
+                "body": post.get("body", result["content"]),
+                "similarity": result["similarity"],
+            })
+        else:
+            # Fallback if file doesn't exist
+            formatted.append({
+                "id": post_id,
+                "path": "",
+                "metadata": result["metadata"],
+                "body": result["content"],
+                "similarity": result["similarity"],
+            })
+
+    return formatted
 
 
 def search_posts(
@@ -110,12 +152,12 @@ def search_posts(
 def list_tags():
     """List all tags and their post counts."""
     tag_data = load_tags()
-    print("\n📏 Tags:")
+    print("\n[Tags]")
     print("-" * 30)
     for tag, posts in sorted(tag_data.get("tags", {}).items()):
         print(f"  {tag}: {len(posts)} posts")
 
-    print("\n📚 Topics:")
+    print("\n[Topics]")
     print("-" * 30)
     for topic, posts in sorted(tag_data.get("topics", {}).items()):
         print(f"  {topic}: {len(posts)} posts")
@@ -129,25 +171,37 @@ def list_authors():
         author = post_info.get("author", "unknown")
         authors[author] = authors.get(author, 0) + 1
 
-    print("\n👤 Authors:")
+    print("\n[Authors]")
     print("-" * 30)
     for author, count in sorted(authors.items(), key=lambda x: -x[1]):
         print(f"  @{author}: {count} posts")
 
 
-def display_results(results: List[dict], format: str = "summary"):
+def display_results(results: List[dict], format: str = "summary", show_similarity: bool = False):
     """Display search results."""
     if not results:
         print("\nNo posts found.")
         return
 
-    print(f"\n📌 Found {len(results)} posts:\n")
+    print(f"\nFound {len(results)} posts:\n")
 
     for i, post in enumerate(results, 1):
         meta = post["metadata"]
 
         if format == "summary":
-            print(f"{i}. @{meta.get('author', {}).get('handle', 'unknown')}")
+            # Get author handle (handle nested structure)
+            author = meta.get("author", {})
+            if isinstance(author, dict):
+                author_handle = author.get("handle", "unknown")
+            else:
+                author_handle = str(author) if author else "unknown"
+
+            # Show similarity score if available
+            similarity_str = ""
+            if show_similarity and "similarity" in post:
+                similarity_str = f" [{post['similarity']:.0%}]"
+
+            print(f"{i}.{similarity_str} @{author_handle}")
             print(f"   ID: {post['id']}")
 
             # Truncate content for summary
@@ -162,6 +216,8 @@ def display_results(results: List[dict], format: str = "summary"):
 
         elif format == "full":
             print("-" * 60)
+            if show_similarity and "similarity" in post:
+                print(f"Similarity: {post['similarity']:.1%}")
             print(format_post_for_llm(post))
             print()
 
@@ -193,6 +249,11 @@ def main():
     # Search command
     search_parser = subparsers.add_parser("find", help="Search posts")
     search_parser.add_argument("query", nargs="?", help="Text to search for")
+    search_parser.add_argument(
+        "--semantic", "-s",
+        action="store_true",
+        help="Use semantic (meaning-based) search instead of keyword matching"
+    )
     search_parser.add_argument("--tag", "-t", action="append", help="Filter by tag")
     search_parser.add_argument("--topic", "-T", action="append", help="Filter by topic")
     search_parser.add_argument("--author", "-a", help="Filter by author")
@@ -203,7 +264,7 @@ def main():
     )
     search_parser.add_argument("--from", dest="date_from", help="From date (YYYY-MM-DD)")
     search_parser.add_argument("--to", dest="date_to", help="To date (YYYY-MM-DD)")
-    search_parser.add_argument("--limit", "-n", type=int, help="Limit results")
+    search_parser.add_argument("--limit", "-n", type=int, default=10, help="Limit results (default: 10)")
     search_parser.add_argument(
         "--format", "-f",
         choices=["summary", "full", "json"],
@@ -233,17 +294,29 @@ def main():
     args = parser.parse_args()
 
     if args.command == "find":
-        results = search_posts(
-            query=args.query,
-            tags=args.tag,
-            topics=args.topic,
-            author=args.author,
-            importance=args.importance,
-            date_from=args.date_from,
-            date_to=args.date_to,
-            limit=args.limit,
-        )
-        display_results(results, args.format)
+        if args.semantic:
+            # Semantic search (requires query)
+            if not args.query:
+                print("Error: Semantic search requires a query.")
+                print("Usage: python search.py find --semantic 'your query'")
+                return
+
+            print(f"[Semantic] Searching for: '{args.query}'")
+            results = semantic_search(args.query, limit=args.limit)
+            display_results(results, args.format, show_similarity=True)
+        else:
+            # Traditional keyword search
+            results = search_posts(
+                query=args.query,
+                tags=args.tag,
+                topics=args.topic,
+                author=args.author,
+                importance=args.importance,
+                date_from=args.date_from,
+                date_to=args.date_to,
+                limit=args.limit,
+            )
+            display_results(results, args.format)
 
     elif args.command == "get":
         post = get_post(args.post_id)
@@ -268,7 +341,7 @@ def main():
         tag_count = len(tag_data.get("tags", {}))
         topic_count = len(tag_data.get("topics", {}))
 
-        print("\n📊 Archive Statistics:")
+        print("\n[Archive Statistics]")
         print("-" * 30)
         print(f"  Total posts: {post_count}")
         print(f"  Unique tags: {tag_count}")

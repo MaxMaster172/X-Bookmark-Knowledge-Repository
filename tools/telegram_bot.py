@@ -40,6 +40,12 @@ from utils import (
 )
 
 import yaml
+import sys
+
+# Add src to path for embedding imports
+sys.path.insert(0, str(BASE_DIR))
+from src.embeddings.vector_store import get_vector_store
+from src.embeddings.service import get_embedding_service
 
 # Logging
 logging.basicConfig(
@@ -146,21 +152,66 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search the archive."""
+    """Search the archive using semantic search."""
     if not is_allowed(update.effective_user.id):
         return
 
     if not context.args:
         await update.message.reply_text(
             "Usage: /search <query>\n\n"
+            "Uses semantic search to find posts by meaning.\n\n"
             "Examples:\n"
-            "• /search machine learning\n"
-            "• /search @karpathy\n"
-            "• /search #ai"
+            "• /search how transformers work\n"
+            "• /search investment opportunities in AI\n"
+            "• /search productivity tips"
         )
         return
 
-    query = " ".join(context.args).lower()
+    query = " ".join(context.args)
+
+    # Try semantic search first
+    try:
+        vector_store = get_vector_store()
+        results = vector_store.search(query, n_results=5)
+
+        if not results:
+            await update.message.reply_text(f"No posts found matching '{query}'")
+            return
+
+        lines = [f"🔍 *Found {len(results)} posts:*\n"]
+        for result in results:
+            metadata = result["metadata"]
+            similarity = result["similarity"]
+            author = metadata.get("author_handle", "unknown")
+
+            # Get tags from metadata
+            tags_str = metadata.get("tags", "")
+            if tags_str:
+                tags_display = tags_str[:30] + "..." if len(tags_str) > 30 else tags_str
+            else:
+                tags_display = "no tags"
+
+            # Truncate content preview
+            content = result["content"]
+            preview = content[:60].replace("\n", " ")
+            if len(content) > 60:
+                preview += "..."
+
+            lines.append(f"• [{similarity:.0%}] @{author}")
+            lines.append(f"  {preview}")
+            lines.append("")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Semantic search failed: {e}")
+        # Fallback to keyword search
+        await keyword_search(update, query)
+
+
+async def keyword_search(update: Update, query: str):
+    """Fallback keyword search."""
+    query = query.lower()
     index = load_index()
     results = []
 
@@ -204,7 +255,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results.sort(key=lambda x: x[1].get("archived_at", ""), reverse=True)
     results = results[:10]
 
-    lines = [f"🔍 *Found {len(results)} posts:*\n"]
+    lines = [f"🔍 *Found {len(results)} posts (keyword search):*\n"]
     for post_id, info in results:
         author = info.get("author", "unknown")
         tags = ", ".join(info.get("tags", [])[:3]) or "no tags"
@@ -538,6 +589,44 @@ def save_archived_post(data: dict) -> Path:
 
     # Git sync (non-blocking, fails silently)
     git_sync(f"Archive: @{thread.author_handle} - {post_id}")
+
+    # Generate and store embedding for semantic search
+    try:
+        embedding_service = get_embedding_service()
+        vector_store = get_vector_store()
+
+        # Create embedding text (content + metadata for richer semantics)
+        embed_text = content
+        embed_text += f"\n\nAuthor: @{thread.author_handle}"
+        if thread.author_name:
+            embed_text += f" ({thread.author_name})"
+        if data.get("tags"):
+            embed_text += f"\nTags: {', '.join(data['tags'])}"
+        if data.get("topics"):
+            embed_text += f"\nTopics: {', '.join(data['topics'])}"
+        if data.get("notes"):
+            embed_text += f"\nNotes: {data['notes']}"
+
+        embedding = embedding_service.generate(embed_text)
+        vector_store.add_post(
+            post_id=post_id,
+            content=content,
+            metadata={
+                "author_handle": thread.author_handle,
+                "author_name": thread.author_name,
+                "url": url,
+                "tags": data.get("tags", []),
+                "topics": data.get("topics", []),
+                "importance": data.get("importance"),
+                "notes": data.get("notes"),
+                "archived_at": archived_at.isoformat(),
+            },
+            embedding=embedding,
+        )
+        logger.info(f"Generated embedding for post {post_id}")
+    except Exception as e:
+        # Non-blocking - post is still saved even if embedding fails
+        logger.warning(f"Failed to generate embedding for {post_id}: {e}")
 
     return file_path
 
