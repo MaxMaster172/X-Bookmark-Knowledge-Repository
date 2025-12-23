@@ -278,7 +278,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     thread_info = ""
     if thread.total_count > 1:
-        thread_info = f"\n\n🧵 *Thread: {thread.total_count} posts*"
+        thread_info = f"\n\n🧵 Thread: {thread.total_count} posts"
 
     keyboard = [
         [
@@ -291,11 +291,11 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # Use plain text to avoid markdown parsing issues
     await update.message.reply_text(
-        f"*@{thread.author_handle}*{thread_info}\n\n"
+        f"@{thread.author_handle}{thread_info}\n\n"
         f"{preview}\n\n"
         "Archive this post?",
-        parse_mode="Markdown",
         reply_markup=reply_markup
     )
 
