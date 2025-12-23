@@ -345,7 +345,7 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📏 *Add Tags*\n\n"
         "What tags describe why you're saving this?\n"
         "Examples: insight, reference, tutorial, funny, thread\n\n"
-        "Send comma-separated tags, or /skip to skip.",
+        "Send comma-separated tags, or type 'skip' to skip.",
         parse_mode="Markdown"
     )
     return ADD_TAGS
@@ -355,7 +355,7 @@ async def add_tags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle tags input."""
     text = update.message.text.strip()
 
-    if text.lower() == "/skip":
+    if text.lower() in ["/skip", "skip", "s"]:
         context.user_data["tags"] = []
     else:
         tags = [t.strip().lower() for t in text.split(",") if t.strip()]
@@ -365,7 +365,7 @@ async def add_tags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📚 *Add Topics*\n\n"
         "What is this post about?\n"
         "Examples: ai, programming, startups, design, crypto\n\n"
-        "Send comma-separated topics, or /skip to skip.",
+        "Send comma-separated topics, or type 'skip' to skip.",
         parse_mode="Markdown"
     )
     return ADD_TOPICS
@@ -375,7 +375,7 @@ async def add_topics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle topics input."""
     text = update.message.text.strip()
 
-    if text.lower() == "/skip":
+    if text.lower() in ["/skip", "skip", "s"]:
         context.user_data["topics"] = []
     else:
         topics = [t.strip().lower() for t in text.split(",") if t.strip()]
@@ -385,7 +385,7 @@ async def add_topics(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📝 *Add Notes*\n\n"
         "Any personal notes about this post?\n"
         "Why did you save it? What's the key takeaway?\n\n"
-        "Send your notes, or /skip to skip.",
+        "Send your notes, or type 'skip' to skip.",
         parse_mode="Markdown"
     )
     return ADD_NOTES
@@ -395,7 +395,7 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle notes input and save the post."""
     text = update.message.text.strip()
 
-    if text.lower() == "/skip":
+    if text.lower() in ["/skip", "skip", "s"]:
         context.user_data["notes"] = None
     else:
         context.user_data["notes"] = text
