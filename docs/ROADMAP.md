@@ -47,7 +47,12 @@ User → Telegram Bot → Twitter Fetcher → Markdown Files → Index JSON
 
 **Storage**: Vector store options - ChromaDB (simple), Qdrant (performant), or plain JSON with numpy.
 
-**Decision**: TBD
+**Decision**:
+- **Embedding model:** `BAAI/bge-small-en-v1.5` (local, free, 384 dimensions)
+- **Vector store:** ChromaDB (embedded, simple, fits file-based philosophy)
+- **Architecture:** Colocated with existing Hetzner VPS
+
+See `docs/SEMANTIC_SEARCH_DESIGN.md` for full decision rationale.
 
 ---
 
@@ -95,11 +100,18 @@ User → Telegram Bot → Twitter Fetcher → Markdown Files → Index JSON
 
 ---
 
-### Priority 4: Frontend / User Interface 🔜 SEPARATE DISCUSSION
+### Priority 4: Frontend / User Interface ✅ DIRECTION SET
 
-**Status**: User has specific ideas - to be discussed in dedicated planning session.
+**Status**: Web app approach decided; will be built after semantic search.
 
-**Notes**: Keep architecture frontend-agnostic. Current file-based storage + JSON index should support various frontend approaches.
+**Decision**:
+- Web app hosted on existing Hetzner VPS alongside Telegram bot
+- Solves multi-device access (iPhone, MacBook, Windows) via browser
+- FastAPI backend serving API + static frontend
+
+**Notes**: Start simple (htmx or vanilla JS), upgrade to SPA later if needed.
+
+See `docs/SEMANTIC_SEARCH_DESIGN.md` for architecture details.
 
 ---
 
@@ -165,11 +177,11 @@ Phase 4: Frontend (separate planning)
 
 ## Open Questions
 
-1. **Embedding model choice**: Local vs API? Quality vs cost vs privacy tradeoffs.
-2. **Vector store**: Simple (ChromaDB) vs performant (Qdrant) vs minimal (JSON+numpy)?
+1. ~~**Embedding model choice**: Local vs API?~~ → **Decided:** Local `bge-small-en-v1.5`
+2. ~~**Vector store**: Simple vs performant vs minimal?~~ → **Decided:** ChromaDB
 3. **RAG LLM**: Claude API vs local models vs hybrid?
 4. **Auto-tagging trigger**: On every archive, or batch process existing?
-5. **Frontend architecture**: To be discussed separately.
+5. ~~**Frontend architecture**: To be discussed separately.~~ → **Decided:** Web app on existing VPS
 
 ---
 
@@ -180,6 +192,10 @@ Phase 4: Frontend (separate planning)
 | 2024-12-23 | No folders/collections | Tags are more flexible for RAG retrieval |
 | 2024-12-23 | Defer media archival | Multi-device constraint; text is primary value |
 | 2024-12-23 | Defer scheduled exports | Premature until RAG usage patterns emerge |
+| 2024-12-23 | Local embeddings (bge-small-en-v1.5) | Free, private, high quality, sufficient for personal scale |
+| 2024-12-23 | ChromaDB for vector storage | Simple, embedded, fits file-based philosophy |
+| 2024-12-23 | Web app for multi-device access | Browser = universal access; simpler than per-device solutions |
+| 2024-12-23 | Colocate on existing Hetzner VPS | Already hosting bot; sufficient resources; $0 additional cost |
 
 ---
 

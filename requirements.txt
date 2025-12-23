@@ -1,0 +1,12 @@
+# Embedding and Vector Store
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+
+# API (Phase 2)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+
+# Utilities
+pyyaml>=6.0
+python-frontmatter>=1.0.0

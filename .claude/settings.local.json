@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m venv:*)",
+      "Bash(\"C:\\\\Users\\\\maxma\\\\X-Bookmark-Knowledge-Repository\\\\venv\\\\Scripts\\\\pip.exe\" install:*)",
+      "Bash(\"C:\\\\Users\\\\maxma\\\\X-Bookmark-Knowledge-Repository\\\\venv\\\\Scripts\\\\python.exe\":*)",
+      "Bash(\"C:\\\\Users\\\\maxma\\\\X-Bookmark-Knowledge-Repository\\\\venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\maxma\\\\X-Bookmark-Knowledge-Repository\\\\scripts\\\\search.py\" \"how does attention work in neural networks\")"
+    ]
+  }
+}
