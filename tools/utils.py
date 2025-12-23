@@ -1,11 +1,15 @@
 """Shared utilities for the X/Twitter archive system."""
 
 import json
+import logging
 import os
 import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Base paths
 BASE_DIR = Path(__file__).parent.parent
@@ -127,3 +131,86 @@ def format_post_for_llm(post: dict, include_metadata: bool = True) -> str:
         lines.append(meta["notes"])
 
     return "\n".join(lines)
+
+
+def git_sync(message: str = None) -> bool:
+    """
+    Commit and push changes to git repository.
+    Returns True if successful, False otherwise.
+    Fails silently - should not break the bot if git isn't configured.
+    """
+    if message is None:
+        message = f"Archive update {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+    try:
+        # Check if we're in a git repo
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            logger.warning("Not a git repository, skipping sync")
+            return False
+
+        # Add all changes
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            timeout=30
+        )
+
+        # Check if there are changes to commit
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if not result.stdout.strip():
+            logger.info("No changes to commit")
+            return True
+
+        # Commit
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            logger.warning(f"Git commit failed: {result.stderr}")
+            return False
+
+        # Push
+        result = subprocess.run(
+            ["git", "push"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if result.returncode != 0:
+            logger.warning(f"Git push failed: {result.stderr}")
+            return False
+
+        logger.info("Git sync successful")
+        return True
+
+    except subprocess.TimeoutExpired:
+        logger.warning("Git operation timed out")
+        return False
+    except Exception as e:
+        logger.warning(f"Git sync failed: {e}")
+        return False
+
+
+def check_duplicate(post_id: str) -> bool:
+    """Check if a post is already archived."""
+    index = load_index()
+    return post_id in index.get("posts", {})

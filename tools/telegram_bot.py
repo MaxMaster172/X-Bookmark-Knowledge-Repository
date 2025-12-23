@@ -32,7 +32,11 @@ from utils import (
     save_index,
     load_tags,
     save_tags,
+    parse_post_file,
+    git_sync,
+    check_duplicate,
     ARCHIVE_DIR,
+    BASE_DIR,
 )
 
 import yaml
@@ -88,6 +92,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - Show this help\n"
         "/stats - Show archive statistics\n"
         "/recent - Show recently archived posts\n"
+        "/search <query> - Search your archive\n"
         "/cancel - Cancel current operation\n\n"
         "*Usage:*\n"
         "Just share or paste an X/Twitter link!",
@@ -140,6 +145,74 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Search the archive."""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /search <query>\n\n"
+            "Examples:\n"
+            "• /search machine learning\n"
+            "• /search @karpathy\n"
+            "• /search #ai"
+        )
+        return
+
+    query = " ".join(context.args).lower()
+    index = load_index()
+    results = []
+
+    for post_id, info in index.get("posts", {}).items():
+        # Search in author
+        if query.startswith("@"):
+            author_query = query[1:]
+            if author_query in info.get("author", "").lower():
+                results.append((post_id, info))
+                continue
+
+        # Search in tags
+        if query.startswith("#"):
+            tag_query = query[1:]
+            if tag_query in [t.lower() for t in info.get("tags", [])]:
+                results.append((post_id, info))
+                continue
+
+        # Search in tags and topics
+        if query in [t.lower() for t in info.get("tags", [])]:
+            results.append((post_id, info))
+            continue
+        if query in [t.lower() for t in info.get("topics", [])]:
+            results.append((post_id, info))
+            continue
+
+        # Full text search - load the post file
+        post_path = BASE_DIR / info["path"]
+        if post_path.exists():
+            post = parse_post_file(post_path)
+            content = post.get("body", "").lower()
+            notes = post.get("metadata", {}).get("notes", "").lower() if post.get("metadata", {}).get("notes") else ""
+            if query in content or query in notes:
+                results.append((post_id, info))
+
+    if not results:
+        await update.message.reply_text(f"No posts found matching '{query}'")
+        return
+
+    # Sort by date and limit
+    results.sort(key=lambda x: x[1].get("archived_at", ""), reverse=True)
+    results = results[:10]
+
+    lines = [f"🔍 *Found {len(results)} posts:*\n"]
+    for post_id, info in results:
+        author = info.get("author", "unknown")
+        tags = ", ".join(info.get("tags", [])[:3]) or "no tags"
+        lines.append(f"• @{author} - {tags}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current operation."""
     context.user_data.clear()
@@ -169,6 +242,15 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = match.group(0)
     # Normalize URL to x.com
     url = re.sub(r'(fxtwitter|vxtwitter|twitter)', 'x', url)
+
+    # Check for duplicate
+    post_id = extract_tweet_id(url)
+    if post_id and check_duplicate(post_id):
+        await update.message.reply_text(
+            "⚠️ This post is already in your archive!\n\n"
+            "Send me a different link, or search with /search"
+        )
+        return ConversationHandler.END
 
     await update.message.reply_text("🔍 Fetching thread...")
 
@@ -200,7 +282,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("✅ Archive This", callback_data="confirm"),
+            InlineKeyboardButton("✅ Archive", callback_data="confirm"),
+            InlineKeyboardButton("⚡ Quick Save", callback_data="quick"),
+        ],
+        [
             InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
         ]
     ]
@@ -225,6 +310,34 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "cancel":
         context.user_data.clear()
         await query.edit_message_text("Cancelled. Send me another link anytime!")
+        return ConversationHandler.END
+
+    # Quick save - skip all prompts
+    if query.data == "quick":
+        await query.edit_message_text("⚡ Quick saving...")
+
+        context.user_data["tags"] = []
+        context.user_data["topics"] = []
+        context.user_data["notes"] = None
+
+        try:
+            file_path = save_archived_post(context.user_data)
+            thread = context.user_data["thread"]
+
+            await query.edit_message_text(
+                f"⚡ *Quick Saved!*\n\n"
+                f"@{thread.author_handle}'s post archived.\n\n"
+                f"Send me another link anytime!",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Failed to save post: {e}")
+            await query.edit_message_text(
+                f"❌ Failed to save: {str(e)}\n\n"
+                "Please try again or report this issue."
+            )
+
+        context.user_data.clear()
         return ConversationHandler.END
 
     # Ask for tags
@@ -423,6 +536,9 @@ def save_archived_post(data: dict) -> Path:
 
     save_tags(tag_data)
 
+    # Git sync (non-blocking, fails silently)
+    git_sync(f"Archive: @{thread.author_handle} - {post_id}")
+
     return file_path
 
 
@@ -461,6 +577,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("recent", recent))
+    application.add_handler(CommandHandler("search", search))
     application.add_handler(conv_handler)
 
     # Start polling
