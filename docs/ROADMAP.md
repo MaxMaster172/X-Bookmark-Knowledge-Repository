@@ -1,22 +1,37 @@
 # X-Bookmark Knowledge Repository - Roadmap & Planning
 
-> Last updated: 2024-12-23
+> Last updated: 2024-12-23 (revised with full feature roadmap)
 
-## Current State (v1.0)
+## Current State (v1.5 - Semantic Search Complete)
 
 ### What's Built
+
+**Core Archive System (v1.0)**
 - **Telegram Bot**: Send X posts directly from mobile → bot archives with metadata
 - **Twitter Fetcher**: Pulls full threads via free APIs (FxTwitter/VxTwitter)
 - **File-based Archive**: Markdown files with YAML frontmatter, organized by date
 - **Metadata System**: Tags, topics, notes, importance levels
-- **Search CLI**: Keyword search with filtering by author/tags/topics/importance
 - **Export Tools**: Multiple formats including LLM-optimized XML output
+
+**Semantic Search (v1.5)** ✅ NEW
+- **Embedding Service**: Local BGE model generates 384-dim vectors
+- **Vector Store**: ChromaDB for persistent, searchable embeddings
+- **Auto-embedding**: New posts get embeddings on save automatically
+- **Semantic Search CLI**: `tools/search.py --semantic` for meaning-based search
+- **Bot Search Upgrade**: `/search` command now uses semantic search by default
 
 ### Architecture
 ```
 User → Telegram Bot → Twitter Fetcher → Markdown Files → Index JSON
-                                              ↓
-                                      Search/Export Tools
+              │                               │
+              │                               ▼
+              │                        Search/Export Tools
+              │                               │
+              ▼                               ▼
+       Embedding Service ────────────► ChromaDB Vectors
+              │
+              ▼
+       Semantic Search (CLI + Bot)
 ```
 
 ---
@@ -56,7 +71,7 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for full decision rationale.
 
 ---
 
-### Priority 2: RAG Integration ✅ APPROVED
+### Priority 2: RAG Integration ✅ DECIDED
 
 **Why**: The ultimate goal - chat with your bookmarks, generate insights, create content from your curated knowledge.
 
@@ -64,17 +79,14 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for full decision rationale.
 - Ask questions, get answers citing your archived posts
 - Generate content based on saved knowledge
 - Surface forgotten insights when relevant
+- Create thread drafts, summaries, and synthesized content
 
-**Implementation Options**:
-| Option | Pros | Cons |
-|--------|------|------|
-| Custom RAG pipeline | Full control, tailored to our data | More work to build |
-| LangChain/LlamaIndex | Battle-tested, many integrations | Complexity, dependencies |
-| Claude with tool use | Native conversation, high quality | API costs |
+**Decision**:
+- **LLM**: Claude API (high quality, streaming support, native tool use)
+- **Approach**: Custom RAG pipeline (simple, tailored to our data structure)
+- **Key features**: Source citations, streaming responses, context control, export synthesis
 
-**Depends on**: Semantic search (embeddings) should be built first.
-
-**Decision**: TBD - discuss implementation approach
+See Phase 6 in `docs/SEMANTIC_SEARCH_DESIGN.md` for full implementation details.
 
 ---
 
@@ -100,18 +112,26 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for full decision rationale.
 
 ---
 
-### Priority 4: Frontend / User Interface ✅ DIRECTION SET
+### Priority 4: Frontend / User Interface ✅ DECIDED
 
-**Status**: Web app approach decided; will be built after semantic search.
+**Status**: Full tech stack and design direction decided.
 
-**Decision**:
-- Web app hosted on existing Hetzner VPS alongside Telegram bot
-- Solves multi-device access (iPhone, MacBook, Windows) via browser
-- FastAPI backend serving API + static frontend
+**Decisions**:
+- **Hosting**: Web app on existing Hetzner VPS alongside Telegram bot
+- **Backend**: FastAPI serving API endpoints
+- **Frontend**: React + Tailwind CSS + shadcn/ui
+- **Build**: Vite for fast development
+- **Auth**: Network-level security (VPN/tunnel); add token auth later if needed
+- **Design**: Modern, polished "AI-forward" aesthetic; dark mode default; mobile-first
 
-**Notes**: Start simple (htmx or vanilla JS), upgrade to SPA later if needed.
+**Core Features**:
+- Semantic search with X-like feed display
+- RAG chat interface (the centerpiece)
+- Post browsing and filtering
+- Knowledge graph visualization
+- Research sessions
 
-See `docs/SEMANTIC_SEARCH_DESIGN.md` for architecture details.
+See `docs/SEMANTIC_SEARCH_DESIGN.md` for full implementation details.
 
 ---
 
@@ -155,22 +175,54 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for architecture details.
 ## Implementation Order
 
 ```
-Phase 1: Semantic Search
-    └── Add embedding generation for posts
-    └── Build vector store
-    └── Create semantic search CLI
+Phase 1: Embedding Infrastructure ✅ COMPLETE
+    └── Set up Python environment with sentence-transformers, ChromaDB
+    └── Create embedding service (BGE model wrapper)
+    └── Create vector store (ChromaDB wrapper)
+    └── Build migration script for existing posts
 
-Phase 2: RAG Pipeline
-    └── Design retrieval strategy
-    └── Build chat interface
-    └── Test and iterate
+Phase 2: Bot Integration ✅ COMPLETE
+    └── Hook embedding generation into save_archived_post()
+    └── Upgrade /search command to semantic search
 
-Phase 3: Auto-Tagging
-    └── Integrate LLM suggestions into bot flow
-    └── Build tag vocabulary management
+Phase 3: Consolidate Search Tools ✅ COMPLETE
+    └── Add --semantic flag to tools/search.py
+    └── Remove duplicate files
 
-Phase 4: Frontend (separate planning)
-    └── TBD based on dedicated discussion
+Phase 4: Search API 🔜 NEXT
+    └── Create FastAPI application
+    └── Implement search, posts, stats endpoints
+    └── Test with curl/Postman
+
+Phase 5: Web Frontend (Search & Browse)
+    └── Set up React + Tailwind + shadcn/ui + Vite
+    └── Build search UI with X-like feed
+    └── Build post detail and browse pages
+
+Phase 6: RAG Chat Interface (THE CORE FEATURE)
+    └── Build RAG pipeline with Claude API
+    └── Create streaming chat UI
+    └── Add source citations, context control, export
+
+Phase 7: Deployment & Integration
+    └── Set up systemd services on VPS
+    └── Configure Nginx reverse proxy
+    └── Set up network-level security
+
+Phase 8: Advanced Features
+    └── Knowledge graph visualization
+    └── Resurface/rediscovery feature
+    └── Related posts sidebar
+    └── Research sessions
+
+Phase 9: Draft Workspace (LOW PRIORITY)
+    └── Writing tool with inline RAG suggestions
+    └── Nice-to-have after everything else works
+
+Phase 10: Polish & Iteration
+    └── Performance optimization
+    └── UX refinements
+    └── Future possibilities (browser extension, etc.)
 ```
 
 ---
@@ -179,9 +231,12 @@ Phase 4: Frontend (separate planning)
 
 1. ~~**Embedding model choice**: Local vs API?~~ → **Decided:** Local `bge-small-en-v1.5`
 2. ~~**Vector store**: Simple vs performant vs minimal?~~ → **Decided:** ChromaDB
-3. **RAG LLM**: Claude API vs local models vs hybrid?
-4. **Auto-tagging trigger**: On every archive, or batch process existing?
-5. ~~**Frontend architecture**: To be discussed separately.~~ → **Decided:** Web app on existing VPS
+3. ~~**RAG LLM**: Claude API vs local models vs hybrid?~~ → **Decided:** Claude API
+4. ~~**Frontend architecture**: To be discussed separately.~~ → **Decided:** React + Tailwind + shadcn/ui
+5. ~~**Authentication**: Public or private?~~ → **Decided:** Network-level (VPN/tunnel)
+6. **Auto-tagging trigger**: On every archive, or batch process existing? (deferred to later)
+7. **Domain name**: Subdomain of existing domain or new one?
+8. **Backup strategy**: How to backup ChromaDB alongside markdown files?
 
 ---
 
@@ -196,11 +251,18 @@ Phase 4: Frontend (separate planning)
 | 2024-12-23 | ChromaDB for vector storage | Simple, embedded, fits file-based philosophy |
 | 2024-12-23 | Web app for multi-device access | Browser = universal access; simpler than per-device solutions |
 | 2024-12-23 | Colocate on existing Hetzner VPS | Already hosting bot; sufficient resources; $0 additional cost |
+| 2024-12-23 | React + Tailwind + shadcn/ui | Modern, flexible, large ecosystem, Claude-friendly |
+| 2024-12-23 | Network-level auth | Private use only; simple; add token auth later if needed |
+| 2024-12-23 | Claude API for RAG | High quality, streaming support, native tool use |
+| 2024-12-23 | Custom RAG pipeline | Simple, tailored to our data, no heavy dependencies |
 
 ---
 
 ## References
 
 - Current implementation: `tools/` directory
+- Embedding service: `src/embeddings/`
+- Design document: `docs/SEMANTIC_SEARCH_DESIGN.md`
 - Post schema: `schemas/post.schema.json`
 - Data indexes: `data/index.json`, `data/tags.json`
+- Vector store: `data/vectors/`
