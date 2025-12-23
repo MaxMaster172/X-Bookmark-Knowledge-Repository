@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "X/Twitter Post Archive Schema",
+  "type": "object",
+  "required": ["id", "url", "author", "content", "archived_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique post ID (from X/Twitter URL)"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Original post URL"
+    },
+    "author": {
+      "type": "object",
+      "required": ["handle"],
+      "properties": {
+        "handle": {
+          "type": "string",
+          "description": "Twitter handle without @"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name"
+        }
+      }
+    },
+    "content": {
+      "type": "string",
+      "description": "Full text content of the post"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the post was originally published"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When you archived this post"
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "User-defined tags for categorization"
+    },
+    "topics": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Subject matter topics"
+    },
+    "thread": {
+      "type": "object",
+      "properties": {
+        "is_thread": {"type": "boolean"},
+        "position": {"type": "integer"},
+        "total": {"type": "integer"},
+        "parent_id": {"type": "string"}
+      }
+    },
+    "media": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"type": "string", "enum": ["image", "video", "gif", "link"]},
+          "url": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "quotes": {
+      "type": "object",
+      "properties": {
+        "quoted_post_id": {"type": "string"},
+        "quoted_url": {"type": "string"}
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Your personal notes about this post"
+    },
+    "importance": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "How important this post is to you"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "likes": {"type": "integer"},
+        "retweets": {"type": "integer"},
+        "replies": {"type": "integer"},
+        "views": {"type": "integer"}
+      }
+    }
+  }
+}

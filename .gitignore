@@ -28,3 +28,9 @@ Thumbs.db
 
 # Logs
 *.log
+# Exports (regenerated, don't need to track)
+exports/
+
+# Local config
+.env
+*.local

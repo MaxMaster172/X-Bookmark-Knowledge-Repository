@@ -10,3 +10,6 @@ python-multipart>=0.0.6
 # Utilities
 pyyaml>=6.0
 python-frontmatter>=1.0.0
+PyYAML>=6.0
+requests>=2.28.0
+python-telegram-bot>=20.0
