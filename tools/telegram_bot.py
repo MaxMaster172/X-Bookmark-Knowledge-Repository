@@ -142,13 +142,13 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No posts archived yet!")
         return
 
-    lines = ["📝 *Recent Archives:*\n"]
+    lines = ["📝 Recent Archives:\n"]
     for post_id, info in posts[:5]:
         author = info.get("author", "unknown")
         tags = ", ".join(info.get("tags", [])) or "no tags"
         lines.append(f"• @{author} - {tags}")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines))
 
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -178,7 +178,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"No posts found matching '{query}'")
             return
 
-        lines = [f"🔍 *Found {len(results)} posts:*\n"]
+        lines = [f"🔍 Found {len(results)} posts:\n"]
         for result in results:
             metadata = result["metadata"]
             similarity = result["similarity"]
@@ -201,7 +201,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"  {preview}")
             lines.append("")
 
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        await update.message.reply_text("\n".join(lines))
 
     except Exception as e:
         logger.error(f"Semantic search failed: {e}")
@@ -255,13 +255,13 @@ async def keyword_search(update: Update, query: str):
     results.sort(key=lambda x: x[1].get("archived_at", ""), reverse=True)
     results = results[:10]
 
-    lines = [f"🔍 *Found {len(results)} posts (keyword search):*\n"]
+    lines = [f"🔍 Found {len(results)} posts (keyword search):\n"]
     for post_id, info in results:
         author = info.get("author", "unknown")
         tags = ", ".join(info.get("tags", [])[:3]) or "no tags"
         lines.append(f"• @{author} - {tags}")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines))
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,10 +376,9 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
             thread = context.user_data["thread"]
 
             await query.edit_message_text(
-                f"⚡ *Quick Saved!*\n\n"
+                f"⚡ Quick Saved!\n\n"
                 f"@{thread.author_handle}'s post archived.\n\n"
-                f"Send me another link anytime!",
-                parse_mode="Markdown"
+                f"Send me another link anytime!"
             )
         except Exception as e:
             logger.error(f"Failed to save post: {e}")
@@ -459,12 +458,11 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         thread = context.user_data["thread"]
 
         await update.message.reply_text(
-            f"✅ *Archived!*\n\n"
+            f"✅ Archived!\n\n"
             f"@{thread.author_handle}'s post has been saved.\n\n"
             f"📏 Tags: {', '.join(context.user_data.get('tags', [])) or 'none'}\n"
             f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}\n\n"
-            f"Send me another link anytime!",
-            parse_mode="Markdown"
+            f"Send me another link anytime!"
         )
     except Exception as e:
         logger.error(f"Failed to save post: {e}")
