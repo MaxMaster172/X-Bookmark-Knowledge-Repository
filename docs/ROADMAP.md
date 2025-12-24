@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Roadmap & Planning
 
-> Last updated: 2024-12-23 (revised with full feature roadmap)
+> Last updated: 2024-12-24 (added image content extraction)
 
 ## Current State (v1.5 - Semantic Search Complete)
 
@@ -90,6 +90,37 @@ See Phase 6 in `docs/SEMANTIC_SEARCH_DESIGN.md` for full implementation details.
 
 ---
 
+### Priority 2.5: Image Content Extraction ✅ APPROVED
+
+**Why**: Many archived posts contain images with critical information (charts, analyst notes, diagrams) that are invisible to text-based search and RAG. We need to capture what a human sees when they look at the post.
+
+**The Problem**:
+- Current state: Only image URLs are stored, not the semantic content
+- Embeddings and RAG only see text, missing visual information
+- URLs can go stale if tweets are deleted, losing content forever
+
+**Solution**: Use Claude Vision to extract rich text descriptions of images at archive time.
+
+```
+Image → Claude Vision API → Text Description → Stored in post → Included in embeddings → RAG understands visual content
+```
+
+**Capabilities**:
+- Extract charts, graphs, and data visualizations into searchable text
+- Capture analyst notes, diagrams, and infographics
+- Transcribe important text from screenshots
+- Preserve semantic content even if image URLs die later
+
+**Decision**:
+- **Vision model:** Claude 3.5 Sonnet (already using Claude for RAG)
+- **Integration:** Extract on archive, backfill existing posts
+- **Storage:** `media[].description` field in post frontmatter
+- **Cost:** ~$0.01/image, <$10/year projected
+
+See `docs/IMAGE_CONTENT_EXTRACTION.md` for full implementation details.
+
+---
+
 ### Priority 3: Auto-Tagging with LLM ✅ APPROVED
 
 **Why**: Manual tagging is friction. LLM can suggest tags based on content, user just confirms.
@@ -135,7 +166,7 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for full implementation details.
 
 ---
 
-### Deferred: Media Archival ⏸️ ON HOLD
+### Deferred: Media File Archival ⏸️ ON HOLD
 
 **The Problem**: Media URLs can go stale if tweets are deleted.
 
@@ -148,7 +179,13 @@ See `docs/SEMANTIC_SEARCH_DESIGN.md` for full implementation details.
 | Git LFS | Version controlled | Storage limits, not for large video |
 | Accept the risk | Simple | Media may be lost |
 
-**Decision**: **Deferred** - accept media loss risk for now. URLs preserved in archive; most value is in text content anyway. Revisit if this becomes a pain point.
+**Decision**: **Deferred** - accept media file loss risk for now.
+
+**Important Update (2024-12-24)**: While we're not archiving media *files*, we ARE now extracting media *content* via Claude Vision (see Priority 2.5). This means:
+- The semantic content of images is preserved permanently as text descriptions
+- RAG and search can understand what's in images
+- Even if URLs die, the extracted information survives
+- This addresses the core value concern while avoiding file storage complexity
 
 ---
 
@@ -193,6 +230,13 @@ Phase 4: Search API 🔜 NEXT
     └── Create FastAPI application
     └── Implement search, posts, stats endpoints
     └── Test with curl/Postman
+
+Phase 4.5: Image Content Extraction
+    └── Create src/vision/ module with Claude Vision wrapper
+    └── Integrate extraction into bot archive flow
+    └── Update embedding text to include image descriptions
+    └── Backfill existing posts with images
+    └── Re-run embedding migration
 
 Phase 5: Web Frontend (Search & Browse)
     └── Set up React + Tailwind + shadcn/ui + Vite
@@ -244,8 +288,10 @@ Phase 10: Polish & Iteration
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2024-12-24 | Claude Vision for image content extraction | Already using Claude; high quality; captures semantic value of images for RAG |
+| 2024-12-24 | Extract descriptions, not archive files | Preserves semantic content; avoids file storage complexity; ~$0.01/image |
 | 2024-12-23 | No folders/collections | Tags are more flexible for RAG retrieval |
-| 2024-12-23 | Defer media archival | Multi-device constraint; text is primary value |
+| 2024-12-23 | Defer media file archival | Multi-device constraint; semantic extraction addresses content preservation |
 | 2024-12-23 | Defer scheduled exports | Premature until RAG usage patterns emerge |
 | 2024-12-23 | Local embeddings (bge-small-en-v1.5) | Free, private, high quality, sufficient for personal scale |
 | 2024-12-23 | ChromaDB for vector storage | Simple, embedded, fits file-based philosophy |
@@ -262,7 +308,9 @@ Phase 10: Polish & Iteration
 
 - Current implementation: `tools/` directory
 - Embedding service: `src/embeddings/`
-- Design document: `docs/SEMANTIC_SEARCH_DESIGN.md`
+- Design documents:
+  - `docs/SEMANTIC_SEARCH_DESIGN.md` - Semantic search and RAG architecture
+  - `docs/IMAGE_CONTENT_EXTRACTION.md` - Vision-based image content extraction
 - Post schema: `schemas/post.schema.json`
 - Data indexes: `data/index.json`, `data/tags.json`
 - Vector store: `data/vectors/`
