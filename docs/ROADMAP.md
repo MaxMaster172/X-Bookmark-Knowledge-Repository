@@ -1,5 +1,7 @@
 # X-Bookmark Knowledge Repository - Roadmap & Planning
 
+> **⚠️ DEPRECATED**: This document has been superseded by [`ARCHITECTURE.md`](./ARCHITECTURE.md) for architectural decisions and implementation phases. This file is retained for historical context only.
+
 > Last updated: 2024-12-24 (added image content extraction)
 
 ## Current State (v1.5 - Semantic Search Complete)

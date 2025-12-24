@@ -1,5 +1,7 @@
 # Semantic Search Design & Implementation Plan
 
+> **⚠️ DEPRECATED**: This document has been superseded by [`ARCHITECTURE.md`](./ARCHITECTURE.md) for architectural decisions and implementation phases. Phases 1-3 (embedding infrastructure) were completed as documented here. Future phases follow the new architecture. This file is retained for historical context.
+
 > Last updated: 2024-12-23 (Phase 4+ revised)
 
 ## Overview
