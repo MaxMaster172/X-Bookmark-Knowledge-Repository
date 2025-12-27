@@ -316,16 +316,21 @@ These were considered but rejected for being overkill:
 
 ---
 
-## When to Build This
+## Current Status
 
-**Trigger**: When you're ready to migrate posts from Notion and the main system is stable.
+**Implemented**: `tools/bulk_import.py` - CLI script that imports from Notion Markdown exports to local filesystem.
 
-**Prerequisites**:
-- Embedding infrastructure working (Phase 1-3 of SEMANTIC_SEARCH_DESIGN.md) ✅
-- Bot integration working ✅
-- Stable post format
+**Important**: This script currently writes to local files (`archive/posts/*.md`). After the Supabase migration (see `ARCHITECTURE.md`), it will need to be updated to write directly to Supabase instead.
 
-**Estimated effort**: 2-4 hours for a working script
+---
+
+## When to Use This
+
+**Recommended**: Wait until after Supabase migration is complete (Phase 2 in ARCHITECTURE.md). Then:
+1. Update `bulk_import.py` to write to Supabase (similar changes as telegram_bot.py)
+2. Run the import once - posts go directly to the central database
+
+**Why wait?** Currently the Telegram bot runs on a Hetzner VPS and saves posts there. Running bulk import locally would create a separate archive out of sync with the VPS. Supabase provides a single source of truth.
 
 ---
 

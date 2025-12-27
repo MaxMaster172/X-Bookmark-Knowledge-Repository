@@ -634,6 +634,7 @@ ANTHROPIC_API_KEY=xxx
 | File | Changes |
 |------|---------|
 | `tools/telegram_bot.py` | Write to Supabase; add image extraction; fix markdown bug |
+| `tools/bulk_import.py` | Update to write to Supabase instead of local files (same pattern as telegram_bot.py) |
 | `tools/utils.py` | Add Supabase helpers |
 | `requirements.txt` | Add supabase, anthropic, httpx |
 | `docs/ROADMAP.md` | Update with new architecture |
