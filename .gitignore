@@ -34,3 +34,10 @@ exports/
 # Local config
 .env
 *.local
+
+# Secrets (never commit)
+SUPABASE CREDENTIALS.txt
+*CREDENTIALS*
+
+# Windows artifacts
+nul
