@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-28 (Phase 2 Complete)
+> Last updated: 2025-12-28 (Phase 2 Complete + VPS Deployed + 27 Posts Migrated)
 
 ## Goal
 
@@ -104,7 +104,13 @@ Per `docs/ARCHITECTURE.md` Phase 2:
 
 ## Stats
 
-- **Total posts**: 4 (in both files and Supabase)
-- **Unique authors**: 3
+- **Total posts**: 27 (all migrated to Supabase)
+- **Unique authors**: Multiple (expanded from original 3)
 - **Database tables**: 12 (all schema applied)
 - **Embeddings**: 384-dimensional vectors on all posts
+- **VPS status**: Bot running with new Supabase code
+
+## Session Auto-Summary (2025-12-28T19:11:44.439Z)
+- Files changed: C
+## Session Auto-Summary (2025-12-28T19:14:28.720Z)
+- Files changed: C
