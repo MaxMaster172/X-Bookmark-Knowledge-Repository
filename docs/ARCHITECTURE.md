@@ -134,6 +134,7 @@ The project is transitioning from a **self-hosted, file-based architecture** to 
 3. **Realtime Subscriptions**: Supabase Realtime for streaming chat responses
 4. **Global CDN**: Frontend served from 100+ edge locations
 5. **Preview Deployments**: Every branch gets a unique URL for testing
+6. **Thesis-Based Knowledge Management**: Posts contribute to evolving theses with AI-generated synthesis
 
 ---
 
@@ -157,8 +158,9 @@ The project is transitioning from a **self-hosted, file-based architecture** to 
 | **Hetzner VPS** | Existing | ~$5-10 |
 | **Claude API** | Pay-as-you-go | ~$5-20 (usage dependent) |
 | **Image Extraction** | Claude Vision | ~$0.50-1 |
+| **Thesis System** | Post analysis + synthesis | ~$1-3 |
 
-**Total:** ~$10-30/month (mostly Claude API for RAG)
+**Total:** ~$12-35/month (Claude API for RAG, thesis detection, synthesis)
 
 ---
 
@@ -168,7 +170,7 @@ The project is transitioning from a **self-hosted, file-based architecture** to 
 
 ```
 Phase 1: Supabase Setup & Data Migration
-    └── Create project, schema, migrate data
+    └── Create project, schema (including thesis tables), migrate data
 
 Phase 2: Telegram Bot Update
     └── Write to Supabase instead of files
@@ -177,18 +179,21 @@ Phase 3: Image Content Extraction
     └── Claude Vision integration
 
 Phase 4: Next.js Application
-    └── Core pages + Supabase client
+    └── Core pages + thesis/entity pages + Supabase client
 
 Phase 5: RAG Chat Interface
-    └── Claude API routes + streaming UI
+    └── Claude API routes + streaming UI + thesis-aware context
 
 Phase 6: Vercel Deployment
     └── Connect repo, configure, go live
 
-Phase 7: Advanced Features
-    └── Knowledge graph, research sessions
+Phase 7: Thesis System & Knowledge Graph
+    └── Entity/thesis detection, synthesis engine, knowledge graph visualization
 
-Phase 8: Cleanup & Documentation
+Phase 8: Research Sessions & Discovery
+    └── Save sessions, resurface posts, related posts
+
+Phase 9: Cleanup & Documentation
     └── Remove old code, update docs
 ```
 
@@ -266,12 +271,104 @@ CREATE TABLE session_posts (
     PRIMARY KEY (session_id, post_id)
 );
 
--- Indexes
+-- Indexes for posts
 CREATE INDEX posts_author_idx ON posts(author_handle);
 CREATE INDEX posts_archived_at_idx ON posts(archived_at DESC);
 CREATE INDEX posts_tags_idx ON posts USING GIN(tags);
 CREATE INDEX posts_embedding_idx ON posts USING ivfflat (embedding vector_cosine_ops);
 CREATE INDEX post_media_post_id_idx ON post_media(post_id);
+
+-- ============================================
+-- THESIS SYSTEM TABLES (see THESIS_SYSTEM_DESIGN.md for details)
+-- ============================================
+
+-- Entity categories (umbrella groups: Amino Acids, Memory Companies)
+CREATE TABLE entity_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Entities (nouns: Glycine, SK Hynix, Vitamin D)
+CREATE TABLE entities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    category_id UUID REFERENCES entity_categories(id) ON DELETE SET NULL,
+    description TEXT,
+    aliases TEXT[] DEFAULT '{}',
+    embedding VECTOR(384),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(name, category_id)
+);
+
+-- Theses (evolving understanding: Sleep, HBM Memory Leadership)
+CREATE TABLE theses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    category TEXT,  -- 'investing', 'health', 'tech'
+    description TEXT,
+    current_synthesis TEXT,
+    synthesis_updated_at TIMESTAMPTZ,
+    synthesis_post_count INTEGER DEFAULT 0,
+    embedding VECTOR(384),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Junction: Posts ↔ Entities
+CREATE TABLE post_entities (
+    post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,
+    entity_id UUID REFERENCES entities(id) ON DELETE CASCADE,
+    confidence FLOAT DEFAULT 1.0,
+    manually_verified BOOLEAN DEFAULT FALSE,
+    PRIMARY KEY (post_id, entity_id)
+);
+
+-- Junction: Posts ↔ Theses (with contribution summary)
+CREATE TABLE post_theses (
+    post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,
+    thesis_id UUID REFERENCES theses(id) ON DELETE CASCADE,
+    contribution TEXT,
+    confidence FLOAT DEFAULT 1.0,
+    manually_verified BOOLEAN DEFAULT FALSE,
+    PRIMARY KEY (post_id, thesis_id)
+);
+
+-- Junction: Entities ↔ Theses
+CREATE TABLE entity_theses (
+    entity_id UUID REFERENCES entities(id) ON DELETE CASCADE,
+    thesis_id UUID REFERENCES theses(id) ON DELETE CASCADE,
+    role TEXT DEFAULT 'subject',
+    PRIMARY KEY (entity_id, thesis_id)
+);
+
+-- Thesis relationships (Vitamin D ↔ K2)
+CREATE TABLE thesis_relationships (
+    thesis_a_id UUID REFERENCES theses(id) ON DELETE CASCADE,
+    thesis_b_id UUID REFERENCES theses(id) ON DELETE CASCADE,
+    relationship_type TEXT,
+    description TEXT,
+    PRIMARY KEY (thesis_a_id, thesis_b_id),
+    CHECK (thesis_a_id < thesis_b_id)
+);
+
+-- Corrections (for learning from user steering)
+CREATE TABLE corrections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,
+    correction_type TEXT NOT NULL,
+    original_value JSONB,
+    corrected_value JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for thesis system
+CREATE INDEX entities_category_idx ON entities(category_id);
+CREATE INDEX entities_embedding_idx ON entities USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX theses_category_idx ON theses(category);
+CREATE INDEX theses_embedding_idx ON theses USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX post_entities_entity_idx ON post_entities(entity_id);
+CREATE INDEX post_theses_thesis_idx ON post_theses(thesis_id);
 ```
 
 #### 1.4 Create Migration Script
@@ -411,16 +508,33 @@ web/
 │   │   └── page.tsx        # Search results (X-like feed)
 │   ├── post/
 │   │   └── [id]/
-│   │       └── page.tsx    # Post detail + similar posts
+│   │       └── page.tsx    # Post detail + entities + thesis contributions
+│   ├── recent/
+│   │   └── page.tsx        # Recent saves with entity/thesis badges
+│   ├── entities/
+│   │   ├── page.tsx        # Browse entities by category
+│   │   └── [id]/
+│   │       └── page.tsx    # Entity detail: all posts, contributing theses
+│   ├── theses/
+│   │   ├── page.tsx        # Browse theses by category
+│   │   └── [id]/
+│   │       └── page.tsx    # Thesis detail: synthesis + posts + entities
 │   ├── chat/
 │   │   └── page.tsx        # RAG chat interface
+│   ├── explore/
+│   │   └── page.tsx        # Knowledge graph visualization
 │   └── api/
-│       └── chat/
-│           └── route.ts    # Claude API endpoint
+│       ├── chat/
+│       │   └── route.ts    # Claude API endpoint
+│       └── synthesis/
+│           └── route.ts    # Thesis synthesis regeneration
 ├── components/
 │   ├── PostCard.tsx        # Post preview card
 │   ├── SearchBar.tsx       # Search input
 │   ├── ChatMessage.tsx     # Chat message bubble
+│   ├── EntityBadge.tsx     # Entity tag/badge
+│   ├── ThesisBadge.tsx     # Thesis tag/badge
+│   ├── SynthesisCard.tsx   # Thesis synthesis display
 │   └── ...
 ├── lib/
 │   ├── supabase.ts         # Supabase client
@@ -432,20 +546,50 @@ web/
 
 **Home (`/`):**
 - Prominent search bar (centered)
-- Recent posts feed (last 10)
-- Quick stats (total posts, top tags)
+- Recent posts feed (last 10) with entity/thesis badges
+- Quick stats (total posts, entities, theses)
+
+**Recent (`/recent`):**
+- Chronological feed of recently saved posts
+- Entity and thesis badges on each post
+- Quick filters by entity category or thesis
 
 **Search (`/search?q=...`):**
 - X-like feed of results
 - Similarity scores (subtle color gradient)
-- Filter sidebar (tags, authors, date range)
+- Filter sidebar (tags, authors, date range, entities, theses)
 - "Add to chat context" action
 
 **Post Detail (`/post/[id]`):**
 - Full post content with media
 - Metadata (tags, author, date, original URL)
+- Linked entities with category badges
+- Thesis contributions ("How this adds to...")
 - Similar posts sidebar
 - "Chat about this" button
+- Edit knowledge links (steering)
+
+**Entities (`/entities`):**
+- Browse all entities grouped by category
+- Search/filter entities
+- Post counts per entity
+
+**Entity Detail (`/entities/[id]`):**
+- Entity name and category
+- All posts mentioning this entity
+- Theses this entity contributes to
+
+**Theses (`/theses`):**
+- Browse all theses by category
+- Synthesis preview (truncated)
+- Post counts, last updated
+
+**Thesis Detail (`/theses/[id]`):**
+- Full current synthesis with regenerate button
+- "X new posts since last update" indicator
+- Related theses
+- Contributing entities
+- All contributing posts with contribution summaries
 
 #### 4.5 Implement Supabase Queries
 
@@ -564,30 +708,111 @@ ANTHROPIC_API_KEY=xxx
 
 ---
 
-### Phase 7: Advanced Features
+### Phase 7: Thesis System & Knowledge Graph
 
-**Goal:** Build knowledge graph, research sessions, and discovery features
+**Goal:** Implement thesis-based knowledge management with AI-powered detection and synthesis
 
-#### 7.1 Knowledge Graph Visualization
+> **Detailed Design:** See `docs/THESIS_SYSTEM_DESIGN.md` for complete specifications
+
+#### 7.1 Knowledge Graph Analyzer
+
+**File:** `src/knowledge_graph/analyzer.py`
+
+Implement Claude API integration for post analysis:
+- Detect entities mentioned in posts (match existing or suggest new)
+- Detect relevant theses (match existing or suggest new)
+- Generate contribution summaries ("How this post adds to thesis X")
+- Suggest entity categories and thesis relationships
+
+```python
+class PostAnalyzer:
+    async def analyze_post(post: dict) -> dict:
+        # Returns: entities, theses, contributions, suggested relationships
+```
+
+#### 7.2 Telegram Bot Integration
+
+**Modify:** `tools/telegram_bot.py`
+
+Add thesis detection to archive flow:
+1. After user provides tags/topics/notes, call analyzer
+2. Present detected entities and theses to user
+3. Allow accept/edit/skip
+4. Save corrections for future learning
+
+```
+Bot: "📊 Knowledge Graph Analysis:
+      Entities: [SK Hynix] [HBM3E]
+      Theses: [HBM Memory Leadership]
+
+      [✅ Accept] [✏️ Edit] [⏭️ Skip]"
+```
+
+#### 7.3 Synthesis Engine
+
+**File:** `src/knowledge_graph/synthesis.py`
+
+Implement thesis synthesis with smart regeneration:
+- **Threshold:** Regenerate after 3 new posts (configurable)
+- **Cooldown:** Minimum 24 hours between auto-regenerations
+- **On-demand:** User can click "Regenerate" (1 hour cooldown)
+
+```python
+class SynthesisEngine:
+    THRESHOLD_POSTS = 3
+    MIN_HOURS_BETWEEN = 24
+
+    async def should_auto_regenerate(thesis_id: str) -> bool
+    async def regenerate_synthesis(thesis_id: str) -> str
+```
+
+#### 7.4 Human Steering / Corrections
+
+Implement edit flow for knowledge graph corrections:
+- Add/remove entity links from post
+- Change entity categories
+- Add/remove thesis links
+- Edit contribution summaries
+- Store corrections for potential future learning
+
+#### 7.5 Backfill Existing Posts
+
+**File:** `scripts/backfill_knowledge_graph.py`
+
+- Analyze all existing posts with Claude
+- Populate entities, theses, contributions
+- Rate limit to avoid API throttling
+
+#### 7.6 Knowledge Graph Visualization
+
+**Page:** `/explore`
 
 - Use D3.js or react-force-graph
-- Nodes: posts (sized by importance)
-- Edges: similarity (from vector distances)
-- Interactive: click to explore
+- Nodes: entities (grouped by category) and theses
+- Edges: entity-thesis relationships, thesis-thesis relationships
+- Interactive: click entity to see posts, click thesis to see synthesis
 
-#### 7.2 Research Sessions
+**Deliverable:** Full thesis-based knowledge management system
+
+---
+
+### Phase 8: Research Sessions & Discovery
+
+**Goal:** Save conversations, resurface forgotten posts
+
+#### 8.1 Research Sessions
 
 - Save chat + source posts as named project
 - Resume sessions later
 - Export entire session as document
 
-#### 7.3 Resurface / Rediscovery
+#### 8.2 Resurface / Rediscovery
 
 - "Random gem" feature
 - Surface posts not viewed recently
 - Optional weekly digest
 
-#### 7.4 Related Posts Sidebar
+#### 8.3 Related Posts Sidebar
 
 - Show 3-5 similar posts on every post view
 - Already have vector similarity - just UI
@@ -596,30 +821,30 @@ ANTHROPIC_API_KEY=xxx
 
 ---
 
-### Phase 8: Cleanup & Documentation
+### Phase 9: Cleanup & Documentation
 
 **Goal:** Remove old code, update documentation
 
-#### 8.1 Remove Deprecated Code
+#### 9.1 Remove Deprecated Code
 
 - `src/embeddings/` (ChromaDB wrapper) - replaced by pgvector
 - `src/api/` (FastAPI) - never built, replaced by Next.js API routes
 - `scripts/migrate_embeddings.py` - one-time migration done
 - Local vector store files (`data/vectors/`)
 
-#### 8.2 Remove Markdown Files
+#### 9.2 Remove Markdown Files
 
 - Delete `archive/posts/` directory (data now lives in Supabase)
 - Delete `data/index.json`, `data/tags.json` (replaced by SQL queries)
 - Delete `data/vectors/` (replaced by pgvector)
 
-#### 8.3 Update Documentation
+#### 9.3 Update Documentation
 
 - Update `ROADMAP.md` with new architecture
 - Deprecate `SEMANTIC_SEARCH_DESIGN.md` (superseded by this document)
 - Update `README.md` with new setup instructions
 
-#### 8.4 Update VPS Configuration
+#### 9.4 Update VPS Configuration
 
 - Remove FastAPI systemd service (never created)
 - Keep telegram-bot.service (updated for Supabase)
@@ -633,15 +858,17 @@ ANTHROPIC_API_KEY=xxx
 
 | File | Changes |
 |------|---------|
-| `tools/telegram_bot.py` | Write to Supabase; add image extraction; fix markdown bug |
+| `tools/telegram_bot.py` | Write to Supabase; add image extraction; add thesis detection; fix markdown bug |
 | `tools/bulk_import.py` | Update to write to Supabase instead of local files (same pattern as telegram_bot.py) |
 | `tools/utils.py` | Add Supabase helpers |
 | `requirements.txt` | Add supabase, anthropic, httpx |
 | `docs/ROADMAP.md` | Update with new architecture |
-| NEW: `web/` | Entire Next.js application |
+| NEW: `web/` | Entire Next.js application (including thesis/entity pages) |
 | NEW: `src/supabase/` | Supabase client module |
 | NEW: `src/vision/` | Image extraction module |
+| NEW: `src/knowledge_graph/` | Post analyzer, synthesis engine, thesis detection |
 | NEW: `scripts/migrate_to_supabase.py` | Data migration script |
+| NEW: `scripts/backfill_knowledge_graph.py` | Populate entities/theses for existing posts |
 
 ---
 
@@ -667,6 +894,12 @@ ANTHROPIC_API_KEY=xxx
 - [ ] Web UI deployed and accessible
 - [ ] RAG chat working with source citations
 - [ ] Preview deployments functional
+- [ ] **Thesis System:**
+  - [ ] Entities and theses auto-detected for new posts
+  - [ ] User can accept/edit/skip knowledge graph suggestions
+  - [ ] Thesis synthesis regenerates (N=3 threshold + on-demand)
+  - [ ] Entity and thesis pages functional in web UI
+  - [ ] Existing posts backfilled into knowledge graph
 - [ ] Documentation updated
 
 ---
@@ -679,3 +912,4 @@ ANTHROPIC_API_KEY=xxx
 - `docs/VERCEL_EVALUATION.md` - Vercel evaluation
 - `docs/IMAGE_CONTENT_EXTRACTION.md` - Claude Vision implementation details
 - `docs/TELEGRAM_MARKDOWN_BUG.md` - Markdown parsing bug and fix
+- `docs/THESIS_SYSTEM_DESIGN.md` - Thesis-based knowledge management (entities, theses, synthesis)
