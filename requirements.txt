@@ -16,6 +16,7 @@ python-frontmatter>=1.0.0
 PyYAML>=6.0
 requests>=2.28.0
 python-telegram-bot>=20.0
+python-dotenv>=1.0.0
 
 # Claude API (for image extraction and thesis system)
 anthropic>=0.18.0

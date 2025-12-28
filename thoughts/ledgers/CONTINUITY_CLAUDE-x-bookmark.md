@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-28
+> Last updated: 2025-12-28 (Phase 2 Complete)
 
 ## Goal
 
@@ -38,10 +38,16 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Data: 4 posts migrated with embeddings
     - Vector search: `match_posts` RPC function working
     - Python client: `src/supabase/client.py` complete
-- Now: [→] Phase 2: Telegram Bot Update
-- Next: Phase 3: Image Content Extraction
+  - [x] Phase 2: Telegram Bot Update
+    - Updated `telegram_bot.py` to write to Supabase
+    - Semantic search via pgvector `match_posts` RPC
+    - Fixed Markdown parsing (switched to HTML)
+    - Updated `bulk_import.py` for Supabase
+    - Added python-dotenv for env var loading
+    - Created integration tests (`tests/test_supabase_integration.py`)
+- Now: [→] Phase 3: Image Content Extraction
+- Next: Phase 4: Next.js Application
 - Remaining:
-  - [ ] Phase 4: Next.js Application
   - [ ] Phase 5: RAG Chat Interface
   - [ ] Phase 6: Vercel Deployment
   - [ ] Phase 7: Thesis System & Knowledge Graph
@@ -51,7 +57,7 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 ## Open Questions
 
 - **Rate limiting for chat**: What limits to control Claude API costs?
-- UNCONFIRMED: Is the Telegram bot currently saving to files or already Supabase?
+- ~~UNCONFIRMED: Is the Telegram bot currently saving to files or already Supabase?~~ CONFIRMED: Now writes to Supabase only.
 
 ## Working Set
 
@@ -80,19 +86,21 @@ python scripts/migrate_to_supabase.py --dry-run
 python tools/search.py find "AI investing" --semantic
 ```
 
-## Phase 2 Implementation Checklist
+## Phase 2 Implementation Checklist (COMPLETE)
 
 Per `docs/ARCHITECTURE.md` Phase 2:
 
-1. [ ] Install supabase Python client (already in requirements.txt)
-2. [ ] Update `tools/telegram_bot.py`:
-   - [ ] Modify `save_archived_post()` to write to Supabase
-   - [ ] Keep BGE embedding generation (already working)
-   - [ ] Store embedding in pgvector instead of ChromaDB
-   - [ ] Remove git sync (no more markdown files)
-3. [ ] Update `/search` command to use Supabase vector search
-4. [ ] Fix Telegram Markdown bug (switch to HTML parse mode)
-5. [ ] Update `tools/bulk_import.py` to write to Supabase
+1. [x] Install supabase Python client (already in requirements.txt)
+2. [x] Update `tools/telegram_bot.py`:
+   - [x] Modify `save_archived_post()` to write to Supabase
+   - [x] Keep BGE embedding generation (already working)
+   - [x] Store embedding in pgvector instead of ChromaDB
+   - [x] Remove git sync (no more markdown files)
+3. [x] Update `/search` command to use Supabase vector search
+4. [x] Fix Telegram Markdown bug (switch to HTML parse mode)
+5. [x] Update `tools/bulk_import.py` to write to Supabase
+6. [x] Add python-dotenv for environment variable loading
+7. [x] Create integration tests
 
 ## Stats
 

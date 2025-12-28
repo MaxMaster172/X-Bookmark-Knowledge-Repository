@@ -5,14 +5,39 @@ Telegram bot for archiving X/Twitter posts.
 Share a post from X to this bot, and it will:
 1. Fetch the full thread (if applicable)
 2. Ask for tags, topics, and notes
-3. Archive it to the repository
+3. Archive it to Supabase (PostgreSQL + pgvector)
+
+Environment variables required:
+- TELEGRAM_BOT_TOKEN: Your Telegram bot token from @BotFather
+- SUPABASE_URL: Your Supabase project URL
+- SUPABASE_SERVICE_KEY: Your Supabase service role key
+
+Optional:
+- ALLOWED_TELEGRAM_USERS: Comma-separated list of allowed user IDs
 """
 
 import os
 import re
+import sys
+import html
 import logging
 from datetime import datetime
 from pathlib import Path
+
+# Load environment variables from .env file if present
+try:
+    from dotenv import load_dotenv
+    # Look for .env in both current directory and parent directory
+    env_paths = [
+        Path(__file__).parent / ".env",
+        Path(__file__).parent.parent / ".env",
+    ]
+    for env_path in env_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            break
+except ImportError:
+    pass  # dotenv not installed, use system environment variables
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -25,21 +50,13 @@ from telegram.ext import (
     filters,
 )
 
-from twitter_fetcher import fetch_thread, extract_tweet_id, Thread
-from utils import (
-    get_post_path,
-    load_index,
-    save_index,
-    load_tags,
-    save_tags,
-    parse_post_file,
-    git_sync,
-    check_duplicate,
-    ARCHIVE_DIR,
-    BASE_DIR,
-)
+# Add directories to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))  # For src/
+sys.path.insert(0, str(Path(__file__).parent))  # For twitter_fetcher
 
-import yaml
+from twitter_fetcher import fetch_thread, extract_tweet_id, Thread
+from src.supabase.client import get_supabase_client, SupabaseClient
+from src.embeddings.service import get_embedding_service, EmbeddingService
 
 # Logging
 logging.basicConfig(
@@ -47,6 +64,41 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Lazy-loaded singletons
+_supabase_client: SupabaseClient = None
+_embedding_service: EmbeddingService = None
+
+
+def get_db() -> SupabaseClient:
+    """Get the Supabase client (lazy singleton)."""
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = get_supabase_client()
+    return _supabase_client
+
+
+def get_embeddings() -> EmbeddingService:
+    """Get the embedding service (lazy singleton)."""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = get_embedding_service()
+    return _embedding_service
+
+
+def escape_html_text(text: str) -> str:
+    """Escape text for Telegram HTML parse mode."""
+    return html.escape(text)
+
+
+def check_duplicate_supabase(post_id: str) -> bool:
+    """Check if a post already exists in Supabase."""
+    try:
+        return get_db().post_exists(post_id)
+    except Exception as e:
+        logger.warning(f"Failed to check duplicate in Supabase: {e}")
+        return False
+
 
 # Conversation states
 WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES = range(5)
@@ -73,151 +125,152 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "📚 *X/Twitter Archive Bot*\n\n"
+        "📚 <b>X/Twitter Archive Bot</b>\n\n"
         "Share a post from X/Twitter with me and I'll archive it for you.\n\n"
         "You can:\n"
         "• Share directly from the X app\n"
         "• Paste a tweet URL\n"
         "• Send me a link\n\n"
         "I'll fetch the full thread and ask you for tags.",
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     await update.message.reply_text(
-        "*Commands:*\n"
+        "<b>Commands:</b>\n"
         "/start - Start the bot\n"
         "/help - Show this help\n"
         "/stats - Show archive statistics\n"
         "/recent - Show recently archived posts\n"
-        "/search <query> - Search your archive\n"
+        "/search &lt;query&gt; - Search your archive\n"
         "/cancel - Cancel current operation\n\n"
-        "*Usage:*\n"
+        "<b>Usage:</b>\n"
         "Just share or paste an X/Twitter link!",
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show archive statistics."""
+    """Show archive statistics from Supabase."""
     if not is_allowed(update.effective_user.id):
         return
 
-    index = load_index()
-    tag_data = load_tags()
+    try:
+        db_stats = get_db().get_stats()
+        post_count = db_stats.get("total_posts", 0)
+        author_count = db_stats.get("unique_authors", 0)
+        tag_count = db_stats.get("unique_tags", 0)
 
-    post_count = len(index.get("posts", {}))
-    tag_count = len(tag_data.get("tags", {}))
-    topic_count = len(tag_data.get("topics", {}))
-
-    await update.message.reply_text(
-        f"📊 *Archive Statistics*\n\n"
-        f"Total posts: {post_count}\n"
-        f"Unique tags: {tag_count}\n"
-        f"Unique topics: {topic_count}",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            f"📊 <b>Archive Statistics</b>\n\n"
+            f"Total posts: {post_count}\n"
+            f"Unique authors: {author_count}\n"
+            f"Unique tags: {tag_count}",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get stats: {e}")
+        await update.message.reply_text(
+            "❌ Failed to load statistics. Please try again."
+        )
 
 
 async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show recently archived posts."""
+    """Show recently archived posts from Supabase."""
     if not is_allowed(update.effective_user.id):
         return
 
-    index = load_index()
-    posts = list(index.get("posts", {}).items())
+    try:
+        posts = get_db().get_recent_posts(limit=5)
 
-    # Sort by archived date
-    posts.sort(key=lambda x: x[1].get("archived_at", ""), reverse=True)
+        if not posts:
+            await update.message.reply_text("No posts archived yet!")
+            return
 
-    if not posts:
-        await update.message.reply_text("No posts archived yet!")
-        return
+        lines = ["📝 <b>Recent Archives:</b>\n"]
+        for post in posts:
+            author = escape_html_text(post.get("author_handle", "unknown"))
+            tags_list = post.get("tags", []) or []
+            tags = escape_html_text(", ".join(tags_list[:3])) if tags_list else "no tags"
+            lines.append(f"• @{author} - {tags}")
 
-    lines = ["📝 Recent Archives:\n"]
-    for post_id, info in posts[:5]:
-        author = info.get("author", "unknown")
-        tags = ", ".join(info.get("tags", [])) or "no tags"
-        lines.append(f"• @{author} - {tags}")
-
-    await update.message.reply_text("\n".join(lines))
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Failed to get recent posts: {e}")
+        await update.message.reply_text(
+            "❌ Failed to load recent posts. Please try again."
+        )
 
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search the archive using keyword search."""
+    """Search the archive using semantic vector search."""
     if not is_allowed(update.effective_user.id):
         return
 
     if not context.args:
         await update.message.reply_text(
-            "Usage: /search <query>\n\n"
-            "Search your archive by keyword.\n\n"
-            "Examples:\n"
-            "• /search transformers\n"
-            "• /search @karpathy\n"
-            "• /search #ai"
+            "<b>Usage:</b> /search &lt;query&gt;\n\n"
+            "Search your archive semantically.\n\n"
+            "<b>Examples:</b>\n"
+            "• /search machine learning tutorials\n"
+            "• /search investment thesis\n"
+            "• /search debugging tips",
+            parse_mode="HTML"
         )
         return
 
     query = " ".join(context.args)
-    await keyword_search(update, query)
+    await semantic_search(update, query)
 
 
-async def keyword_search(update: Update, query: str):
-    """Fallback keyword search."""
-    query = query.lower()
-    index = load_index()
-    results = []
+async def semantic_search(update: Update, query: str):
+    """Perform semantic search using vector similarity."""
+    try:
+        # Generate query embedding
+        query_embedding = get_embeddings().generate_for_query(query)
 
-    for post_id, info in index.get("posts", {}).items():
-        # Search in author
-        if query.startswith("@"):
-            author_query = query[1:]
-            if author_query in info.get("author", "").lower():
-                results.append((post_id, info))
-                continue
+        # Search in Supabase
+        results = get_db().search_posts(
+            query_embedding=query_embedding,
+            match_threshold=0.5,  # Lower threshold for more results
+            match_count=10
+        )
 
-        # Search in tags
-        if query.startswith("#"):
-            tag_query = query[1:]
-            if tag_query in [t.lower() for t in info.get("tags", [])]:
-                results.append((post_id, info))
-                continue
+        if not results:
+            await update.message.reply_text(
+                f"No posts found matching '<b>{escape_html_text(query)}</b>'\n\n"
+                "Try a different search term.",
+                parse_mode="HTML"
+            )
+            return
 
-        # Search in tags and topics
-        if query in [t.lower() for t in info.get("tags", [])]:
-            results.append((post_id, info))
-            continue
-        if query in [t.lower() for t in info.get("topics", [])]:
-            results.append((post_id, info))
-            continue
+        lines = [f"🔍 Found {len(results)} posts for '<b>{escape_html_text(query)}</b>':\n"]
+        for post in results:
+            author = escape_html_text(post.get("author_handle", "unknown"))
+            similarity = post.get("similarity", 0)
+            # Show similarity as percentage
+            sim_pct = int(similarity * 100)
 
-        # Full text search - load the post file
-        post_path = BASE_DIR / info["path"]
-        if post_path.exists():
-            post = parse_post_file(post_path)
-            content = post.get("body", "").lower()
-            notes = post.get("metadata", {}).get("notes", "").lower() if post.get("metadata", {}).get("notes") else ""
-            if query in content or query in notes:
-                results.append((post_id, info))
+            # Get tags if available
+            tags_list = post.get("tags", []) or []
+            tags = escape_html_text(", ".join(tags_list[:2])) if tags_list else ""
 
-    if not results:
-        await update.message.reply_text(f"No posts found matching '{query}'")
-        return
+            # Format: author (score%) - tags
+            if tags:
+                lines.append(f"• @{author} ({sim_pct}%) - {tags}")
+            else:
+                lines.append(f"• @{author} ({sim_pct}%)")
 
-    # Sort by date and limit
-    results.sort(key=lambda x: x[1].get("archived_at", ""), reverse=True)
-    results = results[:10]
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
-    lines = [f"🔍 Found {len(results)} posts (keyword search):\n"]
-    for post_id, info in results:
-        author = info.get("author", "unknown")
-        tags = ", ".join(info.get("tags", [])[:3]) or "no tags"
-        lines.append(f"• @{author} - {tags}")
-
-    await update.message.reply_text("\n".join(lines))
+    except Exception as e:
+        logger.error(f"Semantic search failed: {e}")
+        await update.message.reply_text(
+            "❌ Search failed. Please try again.",
+            parse_mode="HTML"
+        )
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -250,9 +303,9 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Normalize URL to x.com
     url = re.sub(r'(fxtwitter|vxtwitter|twitter)', 'x', url)
 
-    # Check for duplicate
+    # Check for duplicate in Supabase
     post_id = extract_tweet_id(url)
-    if post_id and check_duplicate(post_id):
+    if post_id and check_duplicate_supabase(post_id):
         await update.message.reply_text(
             "⚠️ This post is already in your archive!\n\n"
             "Send me a different link, or search with /search"
@@ -348,11 +401,11 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Ask for tags
     await query.edit_message_text(
-        "📏 *Add Tags*\n\n"
+        "📏 <b>Add Tags</b>\n\n"
         "What tags describe why you're saving this?\n"
         "Examples: insight, reference, tutorial, funny, thread\n\n"
         "Send comma-separated tags, or type 'skip' to skip.",
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     return ADD_TAGS
 
@@ -368,11 +421,11 @@ async def add_tags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["tags"] = tags
 
     await update.message.reply_text(
-        "📚 *Add Topics*\n\n"
+        "📚 <b>Add Topics</b>\n\n"
         "What is this post about?\n"
         "Examples: ai, programming, startups, design, crypto\n\n"
         "Send comma-separated topics, or type 'skip' to skip.",
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     return ADD_TOPICS
 
@@ -388,11 +441,11 @@ async def add_topics(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["topics"] = topics
 
     await update.message.reply_text(
-        "📝 *Add Notes*\n\n"
+        "📝 <b>Add Notes</b>\n\n"
         "Any personal notes about this post?\n"
         "Why did you save it? What's the key takeaway?\n\n"
         "Send your notes, or type 'skip' to skip.",
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     return ADD_NOTES
 
@@ -431,120 +484,102 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-def save_archived_post(data: dict) -> Path:
-    """Save the post to the archive."""
+def save_archived_post(data: dict) -> str:
+    """Save the post to Supabase with embedding."""
     thread: Thread = data["thread"]
     url = data["url"]
 
     post_id = extract_tweet_id(url)
     archived_at = datetime.now()
-    file_path = get_post_path(post_id, archived_at)
 
     # Build content - combine thread if multiple posts
     if thread.total_count > 1:
         content_parts = []
         for i, tweet in enumerate(thread.tweets, 1):
-            content_parts.append(f"**[{i}/{thread.total_count}]**\n{tweet.text}")
+            content_parts.append(f"[{i}/{thread.total_count}]\n{tweet.text}")
         content = "\n\n---\n\n".join(content_parts)
     else:
         content = thread.tweets[0].text
 
-    # Build metadata
-    metadata = {
-        "id": post_id,
-        "url": url,
-        "author": {
-            "handle": thread.author_handle,
-            "name": thread.author_name,
-        },
-        "content": content,
-        "archived_at": archived_at.isoformat(),
-        "archived_via": "telegram",
-    }
-
-    # Thread info
-    if thread.total_count > 1:
-        metadata["thread"] = {
-            "is_thread": True,
-            "total": thread.total_count,
-            "tweet_ids": [t.id for t in thread.tweets],
-        }
-
-    # Optional fields
-    if thread.tweets[0].created_at:
-        metadata["posted_at"] = thread.tweets[0].created_at
-
+    # Build embedding text (content + metadata for better search)
+    embed_text = content
+    if thread.author_handle:
+        embed_text += f"\n\nAuthor: @{thread.author_handle}"
     if data.get("tags"):
-        metadata["tags"] = data["tags"]
-
+        embed_text += f"\nTags: {', '.join(data['tags'])}"
     if data.get("topics"):
-        metadata["topics"] = data["topics"]
-
+        embed_text += f"\nTopics: {', '.join(data['topics'])}"
     if data.get("notes"):
-        metadata["notes"] = data["notes"]
+        embed_text += f"\nNotes: {data['notes']}"
 
-    # Collect all media from thread
-    all_media = []
-    for tweet in thread.tweets:
-        for m in tweet.media:
-            all_media.append({
-                "type": m.get("type", "image"),
-                "url": m.get("url", ""),
-            })
-    if all_media:
-        metadata["media"] = all_media
+    # Generate embedding
+    try:
+        embedding = get_embeddings().generate(embed_text)
+        logger.info(f"Generated embedding for post {post_id}")
+    except Exception as e:
+        logger.error(f"Failed to generate embedding: {e}")
+        embedding = None
 
-    # Check for quoted tweets
+    # Handle quoted tweet
+    quoted_post_id = None
+    quoted_text = None
+    quoted_author = None
+    quoted_url = None
     for tweet in thread.tweets:
         if tweet.quoted_tweet:
-            metadata["quotes"] = {
-                "quoted_post_id": tweet.quoted_tweet.id,
-                "quoted_url": tweet.quoted_tweet.url,
-                "quoted_author": tweet.quoted_tweet.author_handle,
-                "quoted_text": tweet.quoted_tweet.text[:200],
-            }
+            quoted_post_id = tweet.quoted_tweet.id
+            quoted_url = tweet.quoted_tweet.url
+            quoted_author = tweet.quoted_tweet.author_handle
+            quoted_text = tweet.quoted_tweet.text[:200] if tweet.quoted_tweet.text else None
             break
 
-    # Write file
-    with open(file_path, "w") as f:
-        f.write("---\n")
-        yaml.dump(metadata, f, default_flow_style=False, allow_unicode=True)
-        f.write("---\n\n")
-        f.write(content)
-        f.write("\n")
+    # Parse posted_at date
+    posted_at = None
+    if thread.tweets[0].created_at:
+        try:
+            # Handle various date formats
+            posted_at_str = thread.tweets[0].created_at
+            if isinstance(posted_at_str, str):
+                posted_at = posted_at_str  # Let Supabase handle ISO format
+        except Exception:
+            posted_at = None
 
-    # Update index
-    index = load_index()
-    index["posts"][post_id] = {
-        "path": str(file_path.relative_to(ARCHIVE_DIR.parent.parent)),
-        "author": thread.author_handle,
-        "archived_at": archived_at.isoformat(),
-        "tags": data.get("tags", []),
-        "topics": data.get("topics", []),
-        "is_thread": thread.total_count > 1,
-    }
-    save_index(index)
+    # Insert into Supabase
+    db = get_db()
+    db.insert_post(
+        post_id=post_id,
+        url=url,
+        content=content,
+        author_handle=thread.author_handle,
+        author_name=thread.author_name,
+        posted_at=posted_at,
+        archived_at=archived_at,
+        archived_via="telegram",
+        tags=data.get("tags", []),
+        topics=data.get("topics", []),
+        notes=data.get("notes"),
+        is_thread=thread.total_count > 1,
+        quoted_post_id=quoted_post_id,
+        quoted_text=quoted_text,
+        quoted_author=quoted_author,
+        quoted_url=quoted_url,
+        embedding=embedding,
+    )
+    logger.info(f"Saved post {post_id} to Supabase")
 
-    # Update tags
-    tag_data = load_tags()
-    for tag in data.get("tags", []):
-        if tag not in tag_data["tags"]:
-            tag_data["tags"][tag] = []
-        if post_id not in tag_data["tags"][tag]:
-            tag_data["tags"][tag].append(post_id)
+    # Insert media items
+    for tweet in thread.tweets:
+        for m in tweet.media:
+            try:
+                db.insert_media(
+                    post_id=post_id,
+                    media_type=m.get("type", "image"),
+                    url=m.get("url", ""),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to insert media for {post_id}: {e}")
 
-    for topic in data.get("topics", []):
-        if topic not in tag_data["topics"]:
-            tag_data["topics"][topic] = []
-        if post_id not in tag_data["topics"][topic]:
-            tag_data["topics"][topic].append(post_id)
-
-    save_tags(tag_data)
-
-    # Git sync (non-blocking, fails silently)
-    git_sync(f"Archive: @{thread.author_handle} - {post_id}")
-
-    return file_path
+    return post_id
 
 
 def main():

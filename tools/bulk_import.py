@@ -2,8 +2,12 @@
 """
 Bulk Import from Notion
 
-Import X/Twitter posts from a Notion Markdown export file into the knowledge repository.
-Extracts URLs from the markdown, fetches post content, saves to archive, and generates embeddings.
+Import X/Twitter posts from a Notion Markdown export file into Supabase.
+Extracts URLs from the markdown, fetches post content, saves to Supabase with embeddings.
+
+Environment variables required:
+- SUPABASE_URL: Your Supabase project URL
+- SUPABASE_SERVICE_KEY: Your Supabase service role key
 
 Usage:
     python tools/bulk_import.py notion_export.md
@@ -18,27 +22,52 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import yaml
+# Load environment variables from .env file if present
+try:
+    from dotenv import load_dotenv
+    # Look for .env in both current directory and parent directory
+    env_paths = [
+        Path(__file__).parent / ".env",
+        Path(__file__).parent.parent / ".env",
+    ]
+    for env_path in env_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            break
+except ImportError:
+    pass  # dotenv not installed, use system environment variables
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.twitter_fetcher import fetch_thread, Thread, extract_tweet_id
-from tools.utils import (
-    ARCHIVE_DIR,
-    get_post_path,
-    load_index,
-    save_index,
-    load_tags,
-    save_tags,
-    check_duplicate,
-    git_sync,
-)
+from src.supabase.client import get_supabase_client, SupabaseClient
+from src.embeddings.service import get_embedding_service, EmbeddingService
 
 # Pattern to match X/Twitter URLs (including fxtwitter, vxtwitter variants)
 X_URL_PATTERN = re.compile(
     r'https?://(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|vxtwitter\.com|fixupx\.com)/(\w+)/status/(\d+)'
 )
+
+# Lazy-loaded singletons
+_supabase_client: SupabaseClient = None
+_embedding_service: EmbeddingService = None
+
+
+def get_db() -> SupabaseClient:
+    """Get the Supabase client (lazy singleton)."""
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = get_supabase_client()
+    return _supabase_client
+
+
+def get_embeddings() -> EmbeddingService:
+    """Get the embedding service (lazy singleton)."""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = get_embedding_service()
+    return _embedding_service
 
 
 def normalize_twitter_url(url: str) -> str:
@@ -94,13 +123,14 @@ def parse_notion_export(file_path: str) -> list[str]:
 
 
 def check_duplicates(urls: list[str]) -> tuple[list[str], list[str]]:
-    """Check URLs against index, return (new_urls, duplicate_urls)."""
+    """Check URLs against Supabase, return (new_urls, duplicate_urls)."""
     new_urls = []
     duplicate_urls = []
+    db = get_db()
 
     for url in urls:
         tweet_id = extract_tweet_id(url)
-        if tweet_id and check_duplicate(tweet_id):
+        if tweet_id and db.post_exists(tweet_id):
             duplicate_urls.append(url)
         else:
             new_urls.append(url)
@@ -116,8 +146,17 @@ def show_preflight_report(
     skip_confirm: bool
 ) -> bool:
     """Display what will be imported, ask for confirmation. Returns True to proceed."""
-    print("\nBulk Import - X-Bookmark Knowledge Repository")
-    print("-" * 45)
+    # Show Supabase stats
+    try:
+        stats = get_db().get_stats()
+        print("\nBulk Import - X-Bookmark Knowledge Repository (Supabase)")
+        print("-" * 55)
+        print(f"Current database: {stats.get('total_posts', 0)} posts")
+    except Exception as e:
+        print(f"\nWarning: Could not get Supabase stats: {e}")
+        print("\nBulk Import - X-Bookmark Knowledge Repository (Supabase)")
+        print("-" * 55)
+
     print(f"\nFound {total} URLs in export file")
     print(f"Already archived: {len(duplicates)} (will skip)")
     print(f"New posts to import: {len(new_urls)}")
@@ -175,198 +214,112 @@ def build_content(thread: Thread) -> str:
     if thread.total_count > 1:
         content_parts = []
         for i, tweet in enumerate(thread.tweets, 1):
-            content_parts.append(f"**[{i}/{thread.total_count}]**\n{tweet.text}")
+            content_parts.append(f"[{i}/{thread.total_count}]\n{tweet.text}")
         return "\n\n---\n\n".join(content_parts)
     else:
         return thread.tweets[0].text
 
 
-def save_posts(posts: list[tuple[str, Thread]]) -> list[str]:
-    """Save all posts, update index/tags once at end."""
+def save_posts_to_supabase(posts: list[tuple[str, Thread]], no_embed: bool = False) -> tuple[list[str], int]:
+    """Save all posts to Supabase with embeddings. Returns (saved_ids, embed_count)."""
     if not posts:
-        return []
+        return [], 0
 
-    index = load_index()
-    tags_data = load_tags()
+    db = get_db()
     saved_ids = []
-    saved_paths = []
+    embed_count = 0
 
-    print("\nSaving posts to archive...")
+    print("\nSaving posts to Supabase...")
     for url, thread in posts:
         post_id = thread.tweets[0].id
         archived_at = datetime.now()
-        file_path = get_post_path(post_id, archived_at)
 
         # Build content
         content = build_content(thread)
 
-        # Build metadata (matching telegram_bot.py structure)
-        metadata = {
-            "id": post_id,
-            "url": url,
-            "author": {
-                "handle": thread.author_handle,
-                "name": thread.author_name,
-            },
-            "content": content,
-            "archived_at": archived_at.isoformat(),
-            "archived_via": "bulk_import",
-        }
+        # Build embedding text
+        embed_text = content
+        if thread.author_handle:
+            embed_text += f"\n\nAuthor: @{thread.author_handle}"
 
-        # Thread info
-        if thread.total_count > 1:
-            metadata["thread"] = {
-                "is_thread": True,
-                "total": thread.total_count,
-                "tweet_ids": [t.id for t in thread.tweets],
-            }
+        # Generate embedding
+        embedding = None
+        if not no_embed:
+            try:
+                embedding = get_embeddings().generate(embed_text)
+                embed_count += 1
+            except Exception as e:
+                print(f"  Warning: Failed to generate embedding for {post_id}: {e}")
 
-        # Optional fields
-        if thread.tweets[0].created_at:
-            metadata["posted_at"] = thread.tweets[0].created_at
-
-        # Empty tags/topics for bulk import
-        metadata["tags"] = []
-        metadata["topics"] = []
-
-        # Collect media
-        all_media = []
-        for tweet in thread.tweets:
-            for m in tweet.media:
-                all_media.append({
-                    "type": m.get("type", "image"),
-                    "url": m.get("url", ""),
-                })
-        if all_media:
-            metadata["media"] = all_media
-
-        # Check for quoted tweets
+        # Handle quoted tweet
+        quoted_post_id = None
+        quoted_text = None
+        quoted_author = None
+        quoted_url = None
         for tweet in thread.tweets:
             if tweet.quoted_tweet:
-                metadata["quotes"] = {
-                    "quoted_post_id": tweet.quoted_tweet.id,
-                    "quoted_url": tweet.quoted_tweet.url,
-                    "quoted_author": tweet.quoted_tweet.author_handle,
-                    "quoted_text": tweet.quoted_tweet.text[:200],
-                }
+                quoted_post_id = tweet.quoted_tweet.id
+                quoted_url = tweet.quoted_tweet.url
+                quoted_author = tweet.quoted_tweet.author_handle
+                quoted_text = tweet.quoted_tweet.text[:200] if tweet.quoted_tweet.text else None
                 break
 
-        # Write file
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write("---\n")
-            yaml.dump(metadata, f, default_flow_style=False, allow_unicode=True)
-            f.write("---\n\n")
-            f.write(content)
-            f.write("\n")
-
-        # Update index
-        index["posts"][post_id] = {
-            "path": str(file_path.relative_to(ARCHIVE_DIR.parent.parent)),
-            "author": thread.author_handle,
-            "archived_at": archived_at.isoformat(),
-            "tags": [],
-            "topics": [],
-            "is_thread": thread.total_count > 1,
-        }
-
-        saved_ids.append(post_id)
-        saved_paths.append(file_path)
-        print(f"  Saved: {post_id}")
-
-    # Save index and tags ONCE at end
-    save_index(index)
-    save_tags(tags_data)
-
-    return saved_ids
-
-
-def generate_embeddings(saved_ids: list[str]) -> int:
-    """Generate embeddings for all imported posts. Returns count of successful embeddings."""
-    if not saved_ids:
-        return 0
-
-    print("\nGenerating embeddings...")
-
-    try:
-        from src.embeddings.service import get_embedding_service
-        from src.embeddings.vector_store import get_vector_store
-        from tools.utils import parse_post_file
-    except ImportError as e:
-        print(f"  Warning: Could not import embedding modules: {e}")
-        print("  Skipping embedding generation. Run migrate_embeddings.py later.")
-        return 0
-
-    service = get_embedding_service()
-    store = get_vector_store()
-    success_count = 0
-
-    index = load_index()
-
-    for i, post_id in enumerate(saved_ids):
-        print(f"  [{i+1}/{len(saved_ids)}] {post_id} ", end="", flush=True)
+        # Parse posted_at date
+        posted_at = None
+        if thread.tweets[0].created_at:
+            try:
+                posted_at_str = thread.tweets[0].created_at
+                if isinstance(posted_at_str, str):
+                    posted_at = posted_at_str
+            except Exception:
+                posted_at = None
 
         try:
-            # Get post path from index
-            post_info = index["posts"].get(post_id)
-            if not post_info:
-                print("SKIP (not in index)")
-                continue
-
-            post_path = Path(ARCHIVE_DIR.parent.parent) / post_info["path"]
-            post_data = parse_post_file(post_path)
-
-            if not post_data:
-                print("SKIP (parse failed)")
-                continue
-
-            # Build embedding text (content + author)
-            content = post_data.get("content", "")
-            author = post_data.get("author", {})
-            author_handle = author.get("handle", "") if isinstance(author, dict) else str(author)
-
-            embed_text = f"{content}\n\nAuthor: @{author_handle}"
-
-            # Add tags/topics if present
-            tags = post_data.get("tags", [])
-            topics = post_data.get("topics", [])
-            if tags:
-                embed_text += f"\nTags: {', '.join(tags)}"
-            if topics:
-                embed_text += f"\nTopics: {', '.join(topics)}"
-
-            # Generate and store embedding
-            embedding = service.generate(embed_text)
-
-            # Prepare metadata for vector store
-            metadata = {
-                "author_handle": author_handle,
-                "archived_at": post_data.get("archived_at", ""),
-                "archived_via": post_data.get("archived_via", "bulk_import"),
-            }
-
-            store.add_post(
+            # Insert into Supabase
+            db.insert_post(
                 post_id=post_id,
+                url=url,
                 content=content,
-                metadata=metadata,
-                embedding=embedding
+                author_handle=thread.author_handle,
+                author_name=thread.author_name,
+                posted_at=posted_at,
+                archived_at=archived_at,
+                archived_via="bulk_import",
+                tags=[],
+                topics=[],
+                notes=None,
+                is_thread=thread.total_count > 1,
+                quoted_post_id=quoted_post_id,
+                quoted_text=quoted_text,
+                quoted_author=quoted_author,
+                quoted_url=quoted_url,
+                embedding=embedding,
             )
 
-            success_count += 1
-            print("OK")
+            # Insert media items
+            for tweet in thread.tweets:
+                for m in tweet.media:
+                    try:
+                        db.insert_media(
+                            post_id=post_id,
+                            media_type=m.get("type", "image"),
+                            url=m.get("url", ""),
+                        )
+                    except Exception:
+                        pass  # Silently ignore media insertion failures
+
+            saved_ids.append(post_id)
+            status = "OK" if embedding else "OK (no embedding)"
+            print(f"  Saved: {post_id} - {status}")
 
         except Exception as e:
-            print(f"FAILED ({str(e)[:40]})")
+            print(f"  FAILED: {post_id} - {str(e)[:50]}")
 
-    return success_count
+    return saved_ids, embed_count
 
 
 def finalize(saved_ids: list[str], failures: list[tuple[str, str]], embed_count: int):
-    """Single git commit and print summary."""
-    # Git commit
-    if saved_ids:
-        print("\nCommitting changes...")
-        git_sync(f"Bulk import: {len(saved_ids)} posts from Notion")
-
+    """Print summary (no git operations)."""
     # Write failures to log file
     if failures:
         log_path = Path("bulk_import_errors.log")
@@ -376,10 +329,10 @@ def finalize(saved_ids: list[str], failures: list[tuple[str, str]], embed_count:
         print(f"\nErrors logged to: {log_path}")
 
     # Print summary
-    print("\n" + "=" * 45)
+    print("\n" + "=" * 55)
     print("Import Complete!")
-    print("=" * 45)
-    print(f"\nSuccessfully imported: {len(saved_ids)}")
+    print("=" * 55)
+    print(f"\nSuccessfully imported to Supabase: {len(saved_ids)}")
     if embed_count > 0:
         print(f"Embeddings generated: {embed_count}")
     if failures:
@@ -389,10 +342,17 @@ def finalize(saved_ids: list[str], failures: list[tuple[str, str]], embed_count:
         if len(failures) > 5:
             print(f"  ... and {len(failures) - 5} more (see bulk_import_errors.log)")
 
+    # Show final database stats
+    try:
+        stats = get_db().get_stats()
+        print(f"\nDatabase now contains: {stats.get('total_posts', 0)} posts")
+    except Exception:
+        pass
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Import X/Twitter posts from a Notion Markdown export",
+        description="Import X/Twitter posts from a Notion Markdown export to Supabase",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -443,8 +403,8 @@ Examples:
         print("No X/Twitter URLs found in export file.")
         sys.exit(0)
 
-    # Step 2: Check for duplicates
-    print("Checking for duplicates...")
+    # Step 2: Check for duplicates in Supabase
+    print("Checking for duplicates in Supabase...")
     new_urls, duplicate_urls = check_duplicates(urls)
 
     # Step 3: Show pre-flight report
@@ -468,15 +428,10 @@ Examples:
             finalize([], failures, 0)
         sys.exit(1)
 
-    # Step 5: Save posts
-    saved_ids = save_posts(successes)
+    # Step 5: Save posts to Supabase with embeddings
+    saved_ids, embed_count = save_posts_to_supabase(successes, no_embed=args.no_embed)
 
-    # Step 6: Generate embeddings (optional)
-    embed_count = 0
-    if not args.no_embed and saved_ids:
-        embed_count = generate_embeddings(saved_ids)
-
-    # Step 7: Finalize
+    # Step 6: Finalize
     finalize(saved_ids, failures, embed_count)
 
 
