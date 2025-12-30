@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-30 (Phase 3 Code Complete - Pending VPS Deployment)
+> Last updated: 2025-12-30 (Phase 3 Complete - Image Extraction Deployed)
 
 ## Goal
 
@@ -45,12 +45,14 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Updated `bulk_import.py` for Supabase
     - Added python-dotenv for env var loading
     - Created integration tests (`tests/test_supabase_integration.py`)
-- Now: [→] Phase 3: Image Content Extraction (code complete, pending VPS deploy)
+- Done:
+  - [x] Phase 3: Image Content Extraction
     - Created `src/vision/` module (extractor.py, prompts.py)
     - Integrated into telegram_bot.py
-    - Added backfill script
-    - Needs: VPS deployment + ANTHROPIC_API_KEY + backfill run
-- Next: Phase 4: Next.js Application
+    - Deployed to VPS with ANTHROPIC_API_KEY
+    - Backfill complete: 12/14 images processed (2 failed: 1 video, 1 deleted)
+- Now: [→] Phase 4: Next.js Application
+- Next: Phase 5: RAG Chat Interface
 - Remaining:
   - [ ] Phase 5: RAG Chat Interface
   - [ ] Phase 6: Vercel Deployment
@@ -109,11 +111,11 @@ Per `docs/ARCHITECTURE.md` Phase 3:
 4. [x] Create backfill script:
    - [x] `scripts/backfill_image_descriptions.py`
    - [x] CLI with --dry-run, --limit, --regenerate-embeddings
-5. [ ] Deploy to VPS:
-   - [ ] Add ANTHROPIC_API_KEY to .env
-   - [ ] Add ENABLE_IMAGE_EXTRACTION=true to .env
-   - [ ] Pull code, reinstall deps, restart bot
-6. [ ] Run backfill on existing ~75 images
+5. [x] Deploy to VPS:
+   - [x] Add ANTHROPIC_API_KEY to .env
+   - [x] Add ENABLE_IMAGE_EXTRACTION=true to .env
+   - [x] Pull code, reinstall deps, restart bot
+6. [x] Run backfill on existing images (12/14 succeeded)
 
 ## Phase 2 Implementation Checklist (COMPLETE)
 
