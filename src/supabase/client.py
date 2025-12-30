@@ -209,6 +209,58 @@ class SupabaseClient:
         )
         return result.data or []
 
+    def update_media(
+        self,
+        media_id: int,
+        category: str,
+        description: str,
+        extraction_model: str,
+    ) -> bool:
+        """
+        Update a media item with extracted description.
+
+        Args:
+            media_id: The media item ID
+            category: Image category (text_heavy, chart, general)
+            description: Extracted description
+            extraction_model: Model used for extraction
+
+        Returns:
+            True if update succeeded
+        """
+        data = {
+            "category": category,
+            "description": description,
+            "extraction_model": extraction_model,
+            "extracted_at": datetime.now().isoformat(),
+        }
+        result = (
+            self._client.table("post_media")
+            .update(data)
+            .eq("id", media_id)
+            .execute()
+        )
+        return len(result.data) > 0
+
+    def get_media_without_descriptions(self, limit: int = 100) -> list[dict]:
+        """
+        Get media items that don't have descriptions yet.
+
+        Args:
+            limit: Maximum number of items to return
+
+        Returns:
+            List of media items with id, post_id, type, and url
+        """
+        result = (
+            self._client.table("post_media")
+            .select("id, post_id, type, url")
+            .is_("description", "null")
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+
     # ===========================
     # VECTOR SEARCH
     # ===========================

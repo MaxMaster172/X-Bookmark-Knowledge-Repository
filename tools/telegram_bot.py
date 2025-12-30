@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # For twitter_fetcher
 from twitter_fetcher import fetch_thread, extract_tweet_id, Thread
 from src.supabase.client import get_supabase_client, SupabaseClient
 from src.embeddings.service import get_embedding_service, EmbeddingService
+from src.vision import get_image_extractor, ImageExtractor
 
 # Logging
 logging.basicConfig(
@@ -68,6 +69,11 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded singletons
 _supabase_client: SupabaseClient = None
 _embedding_service: EmbeddingService = None
+_image_extractor: ImageExtractor = None
+
+# Image extraction settings
+ENABLE_IMAGE_EXTRACTION = os.environ.get("ENABLE_IMAGE_EXTRACTION", "true").lower() == "true"
+MAX_IMAGES_TO_EXTRACT = int(os.environ.get("MAX_IMAGES_TO_EXTRACT", "4"))
 
 
 def get_db() -> SupabaseClient:
@@ -84,6 +90,18 @@ def get_embeddings() -> EmbeddingService:
     if _embedding_service is None:
         _embedding_service = get_embedding_service()
     return _embedding_service
+
+
+def get_vision() -> ImageExtractor:
+    """Get the image extractor (lazy singleton)."""
+    global _image_extractor
+    if _image_extractor is None:
+        try:
+            _image_extractor = get_image_extractor()
+        except ValueError as e:
+            logger.warning(f"Image extraction disabled: {e}")
+            return None
+    return _image_extractor
 
 
 def escape_html_text(text: str) -> str:
@@ -501,6 +519,33 @@ def save_archived_post(data: dict) -> str:
     else:
         content = thread.tweets[0].text
 
+    # Extract image descriptions if enabled
+    image_descriptions = []
+    image_extraction_results = {}  # url -> {description, category, extraction_model}
+
+    if ENABLE_IMAGE_EXTRACTION:
+        extractor = get_vision()
+        if extractor:
+            images_processed = 0
+            for tweet in thread.tweets:
+                for m in tweet.media:
+                    if images_processed >= MAX_IMAGES_TO_EXTRACT:
+                        break
+                    if m.get("type") == "image" and m.get("url"):
+                        try:
+                            logger.info(f"Extracting description for image: {m.get('url')[:50]}...")
+                            result = extractor.describe_image(
+                                image_url=m.get("url"),
+                                post_context=content[:500],  # First 500 chars as context
+                            )
+                            if result and result.get("description"):
+                                image_extraction_results[m.get("url")] = result
+                                image_descriptions.append(result["description"])
+                                images_processed += 1
+                                logger.info(f"Extracted {result['category']} description for image")
+                        except Exception as e:
+                            logger.warning(f"Image extraction failed: {e}")
+
     # Build embedding text (content + metadata for better search)
     embed_text = content
     if thread.author_handle:
@@ -511,6 +556,10 @@ def save_archived_post(data: dict) -> str:
         embed_text += f"\nTopics: {', '.join(data['topics'])}"
     if data.get("notes"):
         embed_text += f"\nNotes: {data['notes']}"
+
+    # Add image descriptions to embedding text
+    if image_descriptions:
+        embed_text += f"\n\nImage content: {' | '.join(image_descriptions)}"
 
     # Generate embedding
     try:
@@ -567,14 +616,19 @@ def save_archived_post(data: dict) -> str:
     )
     logger.info(f"Saved post {post_id} to Supabase")
 
-    # Insert media items
+    # Insert media items with extraction results
     for tweet in thread.tweets:
         for m in tweet.media:
             try:
+                media_url = m.get("url", "")
+                extraction = image_extraction_results.get(media_url, {})
                 db.insert_media(
                     post_id=post_id,
                     media_type=m.get("type", "image"),
-                    url=m.get("url", ""),
+                    url=media_url,
+                    category=extraction.get("category"),
+                    description=extraction.get("description"),
+                    extraction_model=extraction.get("extraction_model"),
                 )
             except Exception as e:
                 logger.warning(f"Failed to insert media for {post_id}: {e}")

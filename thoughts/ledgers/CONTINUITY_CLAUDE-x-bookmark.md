@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-28 (Phase 2 Complete + VPS Deployed + 27 Posts Migrated)
+> Last updated: 2025-12-30 (Phase 3 Code Complete - Pending VPS Deployment)
 
 ## Goal
 
@@ -45,7 +45,11 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Updated `bulk_import.py` for Supabase
     - Added python-dotenv for env var loading
     - Created integration tests (`tests/test_supabase_integration.py`)
-- Now: [→] Phase 3: Image Content Extraction
+- Now: [→] Phase 3: Image Content Extraction (code complete, pending VPS deploy)
+    - Created `src/vision/` module (extractor.py, prompts.py)
+    - Integrated into telegram_bot.py
+    - Added backfill script
+    - Needs: VPS deployment + ANTHROPIC_API_KEY + backfill run
 - Next: Phase 4: Next.js Application
 - Remaining:
   - [ ] Phase 5: RAG Chat Interface
@@ -66,8 +70,9 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 - `docs/THESIS_SYSTEM_DESIGN.md` - Thesis system design
 - `deploy/sql/001_initial_schema.sql` - Database schema
 - `src/supabase/client.py` - Supabase Python client
-- `tools/telegram_bot.py` - Telegram bot (needs Phase 2 update)
-- `scripts/migrate_to_supabase.py` - Migration script (completed)
+- `src/vision/` - Image extraction module (Phase 3)
+- `tools/telegram_bot.py` - Telegram bot (Phase 3 integrated)
+- `scripts/backfill_image_descriptions.py` - Image backfill script
 
 ### Environment
 - Branch: `main`
@@ -85,6 +90,30 @@ python scripts/migrate_to_supabase.py --dry-run
 # Test vector search
 python tools/search.py find "AI investing" --semantic
 ```
+
+## Phase 3 Implementation Checklist (CODE COMPLETE)
+
+Per `docs/ARCHITECTURE.md` Phase 3:
+
+1. [x] Create vision module:
+   - [x] `src/vision/prompts.py` - Category-specific extraction prompts
+   - [x] `src/vision/extractor.py` - Claude Vision API wrapper (singleton)
+   - [x] `src/vision/__init__.py` - Module exports
+2. [x] Update Supabase client:
+   - [x] Add `update_media()` method
+   - [x] Add `get_media_without_descriptions()` method
+3. [x] Integrate into telegram_bot.py:
+   - [x] Image extraction before media insert
+   - [x] Include descriptions in embedding text
+   - [x] Environment vars: ENABLE_IMAGE_EXTRACTION, MAX_IMAGES_TO_EXTRACT
+4. [x] Create backfill script:
+   - [x] `scripts/backfill_image_descriptions.py`
+   - [x] CLI with --dry-run, --limit, --regenerate-embeddings
+5. [ ] Deploy to VPS:
+   - [ ] Add ANTHROPIC_API_KEY to .env
+   - [ ] Add ENABLE_IMAGE_EXTRACTION=true to .env
+   - [ ] Pull code, reinstall deps, restart bot
+6. [ ] Run backfill on existing ~75 images
 
 ## Phase 2 Implementation Checklist (COMPLETE)
 
