@@ -21,7 +21,7 @@ from .prompts import CATEGORY_DETECTION_PROMPT, get_extraction_prompt
 logger = logging.getLogger(__name__)
 
 # Configuration
-MODEL_NAME = "claude-3-5-sonnet-20241022"
+MODEL_NAME = "claude-sonnet-4-20250514"
 MAX_IMAGE_SIZE_MB = 5
 REQUEST_TIMEOUT = 30
 DELAY_BETWEEN_IMAGES = 0.5
