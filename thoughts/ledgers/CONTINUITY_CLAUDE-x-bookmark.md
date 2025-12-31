@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-30 (Phase 3 Complete - Image Extraction Deployed)
+> Last updated: 2025-12-31 (Phase 4 Complete - Next.js Application MVP)
 
 ## Goal
 
@@ -51,10 +51,17 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Integrated into telegram_bot.py
     - Deployed to VPS with ANTHROPIC_API_KEY
     - Backfill complete: 12/14 images processed (2 failed: 1 video, 1 deleted)
-- Now: [→] Phase 4: Next.js Application
-- Next: Phase 5: RAG Chat Interface
+- Done:
+  - [x] Phase 4: Next.js Application
+    - Next.js 16 + Tailwind + shadcn/ui + Transformers.js
+    - 4 themes: light, dark, sepia, nord (next-themes)
+    - Browser-based semantic search (BGE embeddings via Transformers.js)
+    - Pages: Home, Search, Post, Recent, Entities, Theses
+    - Components: PostCard, SearchBar, EntityBadge, ThesisBadge, etc.
+    - Design decisions documented in `web/docs/DESIGN_DECISIONS.md`
+- Now: [→] Phase 5: RAG Chat Interface
+- Next: Phase 6: Vercel Deployment
 - Remaining:
-  - [ ] Phase 5: RAG Chat Interface
   - [ ] Phase 6: Vercel Deployment
   - [ ] Phase 7: Thesis System & Knowledge Graph
   - [ ] Phase 8: Research Sessions & Discovery
@@ -75,6 +82,8 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 - `src/vision/` - Image extraction module (Phase 3)
 - `tools/telegram_bot.py` - Telegram bot (Phase 3 integrated)
 - `scripts/backfill_image_descriptions.py` - Image backfill script
+- `web/` - Next.js application (Phase 4)
+- `web/docs/DESIGN_DECISIONS.md` - Phase 4 design decisions
 
 ### Environment
 - Branch: `main`
@@ -144,4 +153,6 @@ Per `docs/ARCHITECTURE.md` Phase 2:
 ## Session Auto-Summary (2025-12-28T19:11:44.439Z)
 - Files changed: C
 ## Session Auto-Summary (2025-12-28T19:14:28.720Z)
+- Files changed: C
+## Session Auto-Summary (2025-12-31T14:43:46.752Z)
 - Files changed: C
