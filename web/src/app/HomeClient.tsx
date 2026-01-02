@@ -67,12 +67,18 @@ export function HomeClient({ initialPosts, initialStats }: HomeClientProps) {
       {/* Quick Links */}
       <section className="py-12 bg-muted/30">
         <div className="container max-w-4xl mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <QuickLinkCard
               href="/search"
               title="Search"
               description="Semantic search across all your bookmarks"
               icon="S"
+            />
+            <QuickLinkCard
+              href="/chat"
+              title="Chat"
+              description="Chat with your bookmarks using AI"
+              icon="C"
             />
             <QuickLinkCard
               href="/entities"

@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2025-12-31 (Phase 4 Complete - Next.js Application MVP)
+> Last updated: 2026-01-02 (Phase 5 COMPLETE - RAG Chat Interface)
 
 ## Goal
 
@@ -59,8 +59,18 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Pages: Home, Search, Post, Recent, Entities, Theses
     - Components: PostCard, SearchBar, EntityBadge, ThesisBadge, etc.
     - Design decisions documented in `web/docs/DESIGN_DECISIONS.md`
-- Now: [→] Phase 5: RAG Chat Interface
-- Next: Phase 6: Vercel Deployment
+- Done:
+  - [x] Phase 5: RAG Chat Interface
+    - Claude Sonnet 4 (`claude-sonnet-4-20250514`) via Anthropic SDK with SSE streaming
+    - `/api/chat` route with RAG context retrieval
+    - `useChat` hook with embedding generation and streaming
+    - Chat UI: ChatMessage, ChatInput, ContextSidebar, SourceCitation
+    - `/chat` page with example prompts, auto-scroll, mobile drawer
+    - Navigation links in Header, Home, Post pages
+    - Rate limiting: 20 msg/hour (client-side localStorage)
+    - Fix: Migrated from `@xenova/transformers` to `@huggingface/transformers` (Next.js 16 compat)
+    - Handoffs: `thoughts/handoffs/x-bookmark-phase5/task-*.md`
+- Now: [→] Phase 6: Vercel Deployment
 - Remaining:
   - [ ] Phase 6: Vercel Deployment
   - [ ] Phase 7: Thesis System & Knowledge Graph
@@ -69,7 +79,7 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 
 ## Open Questions
 
-- **Rate limiting for chat**: What limits to control Claude API costs?
+- ~~**Rate limiting for chat**: What limits to control Claude API costs?~~ RESOLVED: 20 msg/hour client-side tracking
 - ~~UNCONFIRMED: Is the Telegram bot currently saving to files or already Supabase?~~ CONFIRMED: Now writes to Supabase only.
 
 ## Working Set
@@ -84,6 +94,7 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 - `scripts/backfill_image_descriptions.py` - Image backfill script
 - `web/` - Next.js application (Phase 4)
 - `web/docs/DESIGN_DECISIONS.md` - Phase 4 design decisions
+- `thoughts/shared/plans/PLAN-phase5-rag-chat.md` - Phase 5 implementation plan
 
 ### Environment
 - Branch: `main`

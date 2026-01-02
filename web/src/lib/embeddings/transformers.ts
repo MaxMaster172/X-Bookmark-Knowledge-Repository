@@ -15,8 +15,9 @@
 const MODEL_NAME = "Xenova/bge-small-en-v1.5";
 const EMBEDDING_DIM = 384;
 
-// Dynamic import types
-type Pipeline = Awaited<ReturnType<typeof import("@xenova/transformers").pipeline>>;
+// Pipeline type - simplified to avoid complex union type inference
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Pipeline = any;
 
 // Singleton state
 let embeddingPipeline: Pipeline | null = null;
@@ -62,7 +63,7 @@ export async function initEmbeddings(
 
   try {
     // Dynamic import - only loads in browser context
-    const { pipeline } = await import("@xenova/transformers");
+    const { pipeline } = await import("@huggingface/transformers");
 
     embeddingPipeline = await pipeline("feature-extraction", MODEL_NAME, {
       progress_callback: (progress: { status: string; progress?: number; file?: string }) => {

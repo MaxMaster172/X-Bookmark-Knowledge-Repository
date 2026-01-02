@@ -3,9 +3,11 @@ import Link from "next/link";
 import { getPost } from "@/lib/queries/posts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { PostMedia } from "@/components/posts";
 import { EntityBadge } from "@/components/entities";
-import { ThesisBadge, SynthesisCard } from "@/components/theses";
+import { ThesisBadge } from "@/components/theses";
+import { MessageSquare } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +37,21 @@ export default async function PostPage({ params }: PostPageProps) {
   return (
     <main className="min-h-screen py-8">
       <div className="container max-w-4xl mx-auto px-4">
-        {/* Back Link */}
-        <Link
-          href="/"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
-        >
-          &larr; Back to home
-        </Link>
+        {/* Navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <Link
+            href="/"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            &larr; Back to home
+          </Link>
+          <Link href={`/chat?postId=${id}`}>
+            <Button variant="outline" size="sm">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Chat about this
+            </Button>
+          </Link>
+        </div>
 
         {/* Post Card */}
         <Card className="mb-8">
