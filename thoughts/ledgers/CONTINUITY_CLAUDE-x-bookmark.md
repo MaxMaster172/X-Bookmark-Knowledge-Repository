@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-02 (Phase 5 COMPLETE - RAG Chat Interface)
+> Last updated: 2026-01-03 (Phase 6 COMPLETE - Vercel Deployment)
 
 ## Goal
 
@@ -70,9 +70,14 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Rate limiting: 20 msg/hour (client-side localStorage)
     - Fix: Migrated from `@xenova/transformers` to `@huggingface/transformers` (Next.js 16 compat)
     - Handoffs: `thoughts/handoffs/x-bookmark-phase5/task-*.md`
-- Now: [→] Phase 6: Vercel Deployment
+- Done:
+  - [x] Phase 6: Vercel Deployment
+    - Deployed to Vercel: https://web-five-swart-90.vercel.app
+    - Environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, ANTHROPIC_API_KEY
+    - All pages functional: Home, Search, Chat, Recent, Entities, Theses
+    - Supabase CORS working out of the box with anon key
+- Now: [→] Phase 7: Thesis System & Knowledge Graph
 - Remaining:
-  - [ ] Phase 6: Vercel Deployment
   - [ ] Phase 7: Thesis System & Knowledge Graph
   - [ ] Phase 8: Research Sessions & Discovery
   - [ ] Phase 9: Cleanup & Documentation
