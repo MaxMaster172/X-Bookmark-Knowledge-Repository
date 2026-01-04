@@ -58,6 +58,7 @@ from twitter_fetcher import fetch_thread, extract_tweet_id, Thread
 from src.supabase.client import get_supabase_client, SupabaseClient
 from src.embeddings.service import get_embedding_service, EmbeddingService
 from src.vision import get_image_extractor, ImageExtractor
+from src.knowledge_graph import PostAnalyzer, get_post_analyzer, ANALYSIS_CONFIG
 
 # Logging
 logging.basicConfig(
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 _supabase_client: SupabaseClient = None
 _embedding_service: EmbeddingService = None
 _image_extractor: ImageExtractor = None
+_post_analyzer: PostAnalyzer = None
 
 # Image extraction settings
 ENABLE_IMAGE_EXTRACTION = os.environ.get("ENABLE_IMAGE_EXTRACTION", "true").lower() == "true"
@@ -104,6 +106,18 @@ def get_vision() -> ImageExtractor:
     return _image_extractor
 
 
+def get_analyzer() -> PostAnalyzer:
+    """Get the post analyzer (lazy singleton)."""
+    global _post_analyzer
+    if _post_analyzer is None:
+        try:
+            _post_analyzer = get_post_analyzer(get_db())
+        except ValueError as e:
+            logger.warning(f"Post analysis disabled: {e}")
+            return None
+    return _post_analyzer
+
+
 def escape_html_text(text: str) -> str:
     """Escape text for Telegram HTML parse mode."""
     return html.escape(text)
@@ -119,7 +133,10 @@ def check_duplicate_supabase(post_id: str) -> bool:
 
 
 # Conversation states
-WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES = range(5)
+WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES, REVIEW_ANALYSIS, EDIT_ANALYSIS = range(7)
+
+# Knowledge graph analysis settings
+ENABLE_KNOWLEDGE_GRAPH = os.environ.get("ENABLE_KNOWLEDGE_GRAPH", "true").lower() == "true"
 
 # Get bot token from environment
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -481,22 +498,164 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Save the post
     try:
-        file_path = save_archived_post(context.user_data)
+        post_id = save_archived_post(context.user_data)
+        context.user_data["saved_post_id"] = post_id
         thread = context.user_data["thread"]
 
         await update.message.reply_text(
             f"✅ Archived!\n\n"
             f"@{thread.author_handle}'s post has been saved.\n\n"
             f"📏 Tags: {', '.join(context.user_data.get('tags', [])) or 'none'}\n"
-            f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}\n\n"
-            f"Send me another link anytime!"
+            f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}"
         )
+
+        # Trigger knowledge graph analysis if enabled
+        if ENABLE_KNOWLEDGE_GRAPH:
+            return await analyze_post_for_knowledge_graph(update, context)
+
     except Exception as e:
         logger.error(f"Failed to save post: {e}")
         await update.message.reply_text(
             f"❌ Failed to save: {str(e)}\n\n"
             "Please try again or report this issue."
         )
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Analyze the saved post for entities and theses."""
+    analyzer = get_analyzer()
+
+    if not analyzer:
+        await update.message.reply_text(
+            "Send me another link anytime!"
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Check rate limit
+    if not get_db().check_analysis_limit(ANALYSIS_CONFIG["max_daily_analysis"]):
+        await update.message.reply_text(
+            "📊 Daily analysis limit reached. Post saved without knowledge graph analysis.\n\n"
+            "Send me another link anytime!"
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    await update.message.reply_text("🔍 Analyzing for knowledge graph...")
+
+    thread = context.user_data["thread"]
+    content = thread.full_text
+
+    try:
+        # Analyze the post
+        analysis = analyzer.analyze_post(
+            content=content,
+            author=thread.author_handle,
+            tags=context.user_data.get("tags", []),
+            topics=context.user_data.get("topics", []),
+            notes=context.user_data.get("notes"),
+        )
+
+        context.user_data["analysis"] = analysis
+
+        if not analysis.has_results:
+            await update.message.reply_text(
+                "No entities or theses detected in this post.\n\n"
+                "Send me another link anytime!"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        # Present analysis results with inline keyboard
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Accept", callback_data="kg_accept"),
+                InlineKeyboardButton("⏭️ Skip", callback_data="kg_skip"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"📊 <b>Knowledge Graph Analysis:</b>\n\n"
+            f"{analysis.to_display_text()}\n\n"
+            f"Add these to your knowledge graph?",
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+
+        return REVIEW_ANALYSIS
+
+    except Exception as e:
+        logger.error(f"Knowledge graph analysis failed: {e}")
+        await update.message.reply_text(
+            "Knowledge graph analysis failed. Post saved without links.\n\n"
+            "Send me another link anytime!"
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+
+async def handle_analysis_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Accept/Skip response for knowledge graph analysis."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "kg_skip":
+        await query.edit_message_text(
+            "⏭️ Skipped knowledge graph linking.\n\n"
+            "Send me another link anytime!"
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    if query.data == "kg_accept":
+        analysis = context.user_data.get("analysis")
+        post_id = context.user_data.get("saved_post_id")
+
+        if not analysis or not post_id:
+            await query.edit_message_text(
+                "❌ Something went wrong. Post was saved but not linked.\n\n"
+                "Send me another link anytime!"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        try:
+            # Apply the analysis
+            analyzer = get_analyzer()
+            result = analyzer.apply_analysis(post_id, analysis)
+
+            created = result["created"]
+            linked = result["linked"]
+
+            summary_parts = []
+            if created["entities"] > 0:
+                summary_parts.append(f"{created['entities']} new entities")
+            if created["theses"] > 0:
+                summary_parts.append(f"{created['theses']} new theses")
+            if linked["entities"] > 0:
+                summary_parts.append(f"{linked['entities']} entity links")
+            if linked["theses"] > 0:
+                summary_parts.append(f"{linked['theses']} thesis links")
+
+            summary = ", ".join(summary_parts) if summary_parts else "No changes"
+
+            await query.edit_message_text(
+                f"✅ Knowledge graph updated!\n\n"
+                f"{summary}\n\n"
+                f"Send me another link anytime!"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to apply analysis: {e}")
+            await query.edit_message_text(
+                f"❌ Failed to update knowledge graph: {str(e)}\n\n"
+                "Post was saved but not linked.\n"
+                "Send me another link anytime!"
+            )
 
     context.user_data.clear()
     return ConversationHandler.END
@@ -662,6 +821,7 @@ def main():
             ADD_TAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_tags)],
             ADD_TOPICS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_topics)],
             ADD_NOTES: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_notes)],
+            REVIEW_ANALYSIS: [CallbackQueryHandler(handle_analysis_response)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

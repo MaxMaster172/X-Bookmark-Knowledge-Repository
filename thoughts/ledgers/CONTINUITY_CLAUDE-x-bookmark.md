@@ -76,9 +76,15 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, ANTHROPIC_API_KEY
     - All pages functional: Home, Search, Chat, Recent, Entities, Theses
     - Supabase CORS working out of the box with anon key
-- Now: [→] Phase 7: Thesis System & Knowledge Graph
+- Now: [→] Phase 7: Thesis System & Knowledge Graph (Core Analysis - IN PROGRESS)
+    - Created `src/knowledge_graph/` module (analyzer.py, prompts.py, config.py)
+    - Extended `src/supabase/client.py` with entity/thesis CRUD methods
+    - Added `deploy/sql/002_api_usage_table.sql` for rate limiting
+    - Integrated analysis flow into `tools/telegram_bot.py`
+    - Accept/Skip UI for knowledge graph suggestions
+    - Remaining: Deploy to VPS, test with real posts
 - Remaining:
-  - [ ] Phase 7: Thesis System & Knowledge Graph
+  - [ ] Phase 7 (continued): Synthesis engine, visualization
   - [ ] Phase 8: Research Sessions & Discovery
   - [ ] Phase 9: Cleanup & Documentation
 

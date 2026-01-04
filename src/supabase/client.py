@@ -339,6 +339,315 @@ class SupabaseClient:
         }
 
 
+    # ===========================
+    # ENTITY OPERATIONS
+    # ===========================
+
+    def get_all_entities_with_aliases(self) -> list[dict]:
+        """
+        Get all entities with their aliases and categories for matching.
+
+        Returns list of dicts with: id, name, aliases, category_id, category_name
+        """
+        result = (
+            self._client.table("entities")
+            .select("id, name, aliases, category_id, entity_categories(name)")
+            .execute()
+        )
+
+        entities = []
+        for e in result.data or []:
+            entities.append({
+                "id": e["id"],
+                "name": e["name"],
+                "aliases": e.get("aliases") or [],
+                "category_id": e.get("category_id"),
+                "category_name": e.get("entity_categories", {}).get("name") if e.get("entity_categories") else None,
+            })
+        return entities
+
+    def get_all_entity_categories(self) -> list[dict]:
+        """Get all entity categories."""
+        result = (
+            self._client.table("entity_categories")
+            .select("id, name, description")
+            .execute()
+        )
+        return result.data or []
+
+    def create_entity_category(self, name: str, description: str = None) -> str:
+        """
+        Create a new entity category.
+
+        Returns the category ID.
+        """
+        data = {"name": name}
+        if description:
+            data["description"] = description
+
+        result = self._client.table("entity_categories").insert(data).execute()
+        logger.info(f"Created entity category: {name}")
+        return result.data[0]["id"] if result.data else None
+
+    def get_or_create_entity_category(self, name: str, description: str = None) -> str:
+        """
+        Get existing category by name or create if doesn't exist.
+
+        Returns the category ID.
+        """
+        # Try to find existing
+        result = (
+            self._client.table("entity_categories")
+            .select("id")
+            .eq("name", name)
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]["id"]
+
+        # Create new
+        return self.create_entity_category(name, description)
+
+    def create_entity(
+        self,
+        name: str,
+        category_name: str = None,
+        description: str = None,
+        aliases: list[str] = None,
+        embedding: list[float] = None,
+    ) -> str:
+        """
+        Create a new entity.
+
+        Returns the entity ID.
+        """
+        data = {"name": name}
+
+        if category_name:
+            category_id = self.get_or_create_entity_category(category_name)
+            data["category_id"] = category_id
+
+        if description:
+            data["description"] = description
+        if aliases:
+            data["aliases"] = aliases
+        if embedding:
+            data["embedding"] = embedding
+
+        result = self._client.table("entities").insert(data).execute()
+        logger.info(f"Created entity: {name}")
+        return result.data[0]["id"] if result.data else None
+
+    def link_post_entity(
+        self,
+        post_id: str,
+        entity_id: str,
+        confidence: float = 1.0,
+        manually_verified: bool = False,
+    ) -> None:
+        """Link a post to an entity."""
+        data = {
+            "post_id": post_id,
+            "entity_id": entity_id,
+            "confidence": confidence,
+            "manually_verified": manually_verified,
+        }
+
+        # Use upsert to handle duplicates gracefully
+        self._client.table("post_entities").upsert(data).execute()
+        logger.debug(f"Linked post {post_id[:8]}... to entity {entity_id[:8]}...")
+
+    # ===========================
+    # THESIS OPERATIONS
+    # ===========================
+
+    def get_all_theses(self) -> list[dict]:
+        """Get all theses for matching."""
+        result = (
+            self._client.table("theses")
+            .select("id, name, category, description")
+            .execute()
+        )
+        return result.data or []
+
+    def create_thesis(
+        self,
+        name: str,
+        category: str = "general",
+        description: str = None,
+        embedding: list[float] = None,
+    ) -> str:
+        """
+        Create a new thesis.
+
+        Returns the thesis ID.
+        """
+        data = {
+            "name": name,
+            "category": category,
+        }
+
+        if description:
+            data["description"] = description
+        if embedding:
+            data["embedding"] = embedding
+
+        result = self._client.table("theses").insert(data).execute()
+        logger.info(f"Created thesis: {name}")
+        return result.data[0]["id"] if result.data else None
+
+    def link_post_thesis(
+        self,
+        post_id: str,
+        thesis_id: str,
+        contribution: str = None,
+        confidence: float = 1.0,
+        manually_verified: bool = False,
+    ) -> None:
+        """Link a post to a thesis with a contribution summary."""
+        data = {
+            "post_id": post_id,
+            "thesis_id": thesis_id,
+            "confidence": confidence,
+            "manually_verified": manually_verified,
+        }
+
+        if contribution:
+            data["contribution"] = contribution
+
+        # Use upsert to handle duplicates gracefully
+        self._client.table("post_theses").upsert(data).execute()
+        logger.debug(f"Linked post {post_id[:8]}... to thesis {thesis_id[:8]}...")
+
+    def link_entity_thesis(
+        self,
+        entity_id: str,
+        thesis_id: str,
+        role: str = "subject",
+    ) -> None:
+        """Link an entity to a thesis with a role."""
+        data = {
+            "entity_id": entity_id,
+            "thesis_id": thesis_id,
+            "role": role,
+        }
+
+        self._client.table("entity_theses").upsert(data).execute()
+        logger.debug(f"Linked entity {entity_id[:8]}... to thesis {thesis_id[:8]}...")
+
+    def create_thesis_relationship(
+        self,
+        thesis_a_id: str,
+        thesis_b_id: str,
+        relationship_type: str,
+        description: str = None,
+    ) -> None:
+        """
+        Create a relationship between two theses.
+
+        Note: thesis_a_id must be < thesis_b_id (per DB constraint).
+        """
+        # Ensure proper ordering
+        if thesis_a_id > thesis_b_id:
+            thesis_a_id, thesis_b_id = thesis_b_id, thesis_a_id
+
+        data = {
+            "thesis_a_id": thesis_a_id,
+            "thesis_b_id": thesis_b_id,
+            "relationship_type": relationship_type,
+        }
+
+        if description:
+            data["description"] = description
+
+        self._client.table("thesis_relationships").upsert(data).execute()
+        logger.debug(f"Created thesis relationship: {relationship_type}")
+
+    # ===========================
+    # API USAGE TRACKING
+    # ===========================
+
+    def get_or_create_usage_record(self, date_str: str = None) -> dict:
+        """
+        Get or create API usage record for a date.
+
+        Args:
+            date_str: Date in YYYY-MM-DD format (defaults to today)
+
+        Returns dict with: date, analysis_count, synthesis_count
+        """
+        from datetime import date
+
+        if date_str is None:
+            date_str = date.today().isoformat()
+
+        # Try to get existing
+        result = (
+            self._client.table("api_usage")
+            .select("*")
+            .eq("date", date_str)
+            .execute()
+        )
+
+        if result.data:
+            return result.data[0]
+
+        # Create new record
+        data = {
+            "date": date_str,
+            "analysis_count": 0,
+            "synthesis_count": 0,
+        }
+        result = self._client.table("api_usage").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def increment_analysis_count(self) -> int:
+        """
+        Increment today's analysis count.
+
+        Returns the new count.
+        """
+        from datetime import date
+
+        date_str = date.today().isoformat()
+        record = self.get_or_create_usage_record(date_str)
+        new_count = record["analysis_count"] + 1
+
+        self._client.table("api_usage").update(
+            {"analysis_count": new_count}
+        ).eq("date", date_str).execute()
+
+        return new_count
+
+    def increment_synthesis_count(self) -> int:
+        """
+        Increment today's synthesis count.
+
+        Returns the new count.
+        """
+        from datetime import date
+
+        date_str = date.today().isoformat()
+        record = self.get_or_create_usage_record(date_str)
+        new_count = record["synthesis_count"] + 1
+
+        self._client.table("api_usage").update(
+            {"synthesis_count": new_count}
+        ).eq("date", date_str).execute()
+
+        return new_count
+
+    def check_analysis_limit(self, daily_limit: int = 20) -> bool:
+        """
+        Check if we're under the daily analysis limit.
+
+        Returns True if we can make another analysis call.
+        """
+        record = self.get_or_create_usage_record()
+        return record["analysis_count"] < daily_limit
+
+
 def get_supabase_client() -> SupabaseClient:
     """Get the singleton Supabase client instance."""
     global _client
