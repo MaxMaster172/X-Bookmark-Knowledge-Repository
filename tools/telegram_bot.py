@@ -4,8 +4,8 @@ Telegram bot for archiving X/Twitter posts.
 
 Share a post from X to this bot, and it will:
 1. Fetch the full thread (if applicable)
-2. Ask for tags, topics, and notes
-3. Archive it to Supabase (PostgreSQL + pgvector)
+2. Archive it to Supabase (PostgreSQL + pgvector)
+3. Analyze with Claude for entities and theses (knowledge graph)
 
 Environment variables required:
 - TELEGRAM_BOT_TOKEN: Your Telegram bot token from @BotFather
@@ -14,6 +14,8 @@ Environment variables required:
 
 Optional:
 - ALLOWED_TELEGRAM_USERS: Comma-separated list of allowed user IDs
+- ENABLE_KNOWLEDGE_GRAPH: Enable Claude analysis (default: true)
+- ANTHROPIC_API_KEY: Required if ENABLE_KNOWLEDGE_GRAPH is true
 """
 
 import os
@@ -146,8 +148,8 @@ def check_duplicate_supabase(post_id: str) -> bool:
         return False
 
 
-# Conversation states
-WAITING_FOR_URL, CONFIRM_CONTENT, ADD_TAGS, ADD_TOPICS, ADD_NOTES, REVIEW_ANALYSIS, EDIT_ANALYSIS = range(7)
+# Conversation states (simplified - removed ADD_TAGS, ADD_TOPICS, ADD_NOTES)
+WAITING_FOR_URL, CONFIRM_CONTENT, REVIEW_ANALYSIS, EDIT_ANALYSIS = range(4)
 
 # Knowledge graph analysis settings
 ENABLE_KNOWLEDGE_GRAPH = os.environ.get("ENABLE_KNOWLEDGE_GRAPH", "true").lower() == "true"
@@ -391,10 +393,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("✅ Archive", callback_data="confirm"),
-            InlineKeyboardButton("⚡ Quick Save", callback_data="quick"),
-        ],
-        [
+            InlineKeyboardButton("✅ Archive", callback_data="quick"),
             InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
         ]
     ]
@@ -452,95 +451,6 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
         return ConversationHandler.END
-
-    # Ask for tags
-    await query.edit_message_text(
-        "📏 <b>Add Tags</b>\n\n"
-        "What tags describe why you're saving this?\n"
-        "Examples: insight, reference, tutorial, funny, thread\n\n"
-        "Send comma-separated tags, or type 'skip' to skip.",
-        parse_mode="HTML"
-    )
-    return ADD_TAGS
-
-
-async def add_tags(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tags input."""
-    text = update.message.text.strip()
-
-    if text.lower() in ["/skip", "skip", "s"]:
-        context.user_data["tags"] = []
-    else:
-        tags = [t.strip().lower() for t in text.split(",") if t.strip()]
-        context.user_data["tags"] = tags
-
-    await update.message.reply_text(
-        "📚 <b>Add Topics</b>\n\n"
-        "What is this post about?\n"
-        "Examples: ai, programming, startups, design, crypto\n\n"
-        "Send comma-separated topics, or type 'skip' to skip.",
-        parse_mode="HTML"
-    )
-    return ADD_TOPICS
-
-
-async def add_topics(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle topics input."""
-    text = update.message.text.strip()
-
-    if text.lower() in ["/skip", "skip", "s"]:
-        context.user_data["topics"] = []
-    else:
-        topics = [t.strip().lower() for t in text.split(",") if t.strip()]
-        context.user_data["topics"] = topics
-
-    await update.message.reply_text(
-        "📝 <b>Add Notes</b>\n\n"
-        "Any personal notes about this post?\n"
-        "Why did you save it? What's the key takeaway?\n\n"
-        "Send your notes, or type 'skip' to skip.",
-        parse_mode="HTML"
-    )
-    return ADD_NOTES
-
-
-async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle notes input and save the post."""
-    text = update.message.text.strip()
-
-    if text.lower() in ["/skip", "skip", "s"]:
-        context.user_data["notes"] = None
-    else:
-        context.user_data["notes"] = text
-
-    await update.message.reply_text("💾 Saving to archive...")
-
-    # Save the post
-    try:
-        post_id = save_archived_post(context.user_data)
-        context.user_data["saved_post_id"] = post_id
-        thread = context.user_data["thread"]
-
-        await update.message.reply_text(
-            f"✅ Archived!\n\n"
-            f"@{thread.author_handle}'s post has been saved.\n\n"
-            f"📏 Tags: {', '.join(context.user_data.get('tags', [])) or 'none'}\n"
-            f"📚 Topics: {', '.join(context.user_data.get('topics', [])) or 'none'}"
-        )
-
-        # Trigger knowledge graph analysis if enabled
-        if ENABLE_KNOWLEDGE_GRAPH:
-            return await analyze_post_for_knowledge_graph(update, context)
-
-    except Exception as e:
-        logger.error(f"Failed to save post: {e}")
-        await update.message.reply_text(
-            f"❌ Failed to save: {str(e)}\n\n"
-            "Please try again or report this issue."
-        )
-
-    context.user_data.clear()
-    return ConversationHandler.END
 
 
 async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -835,16 +745,13 @@ def main():
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Conversation handler for archiving flow
+    # Conversation handler for archiving flow (simplified - no manual tags/topics/notes)
     conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url),
         ],
         states={
             CONFIRM_CONTENT: [CallbackQueryHandler(confirm_content)],
-            ADD_TAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_tags)],
-            ADD_TOPICS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_topics)],
-            ADD_NOTES: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_notes)],
             REVIEW_ANALYSIS: [CallbackQueryHandler(handle_analysis_response)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
