@@ -123,6 +123,20 @@ def escape_html_text(text: str) -> str:
     return html.escape(text)
 
 
+async def reply_text(update: Update, text: str, **kwargs):
+    """Reply to user in both message and callback query contexts.
+
+    When called from a callback query handler, uses reply_text on the message.
+    When called from a message handler, uses reply_text directly.
+    """
+    if update.callback_query:
+        return await update.callback_query.message.reply_text(text, **kwargs)
+    elif update.message:
+        return await update.message.reply_text(text, **kwargs)
+    else:
+        raise ValueError("Update has neither callback_query nor message")
+
+
 def check_duplicate_supabase(post_id: str) -> bool:
     """Check if a post already exists in Supabase."""
     try:
@@ -416,14 +430,19 @@ async def confirm_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["notes"] = None
 
         try:
-            file_path = save_archived_post(context.user_data)
+            post_id = save_archived_post(context.user_data)
+            context.user_data["saved_post_id"] = post_id
             thread = context.user_data["thread"]
 
             await query.edit_message_text(
                 f"⚡ Quick Saved!\n\n"
-                f"@{thread.author_handle}'s post archived.\n\n"
-                f"Send me another link anytime!"
+                f"@{thread.author_handle}'s post archived."
             )
+
+            # Trigger knowledge graph analysis if enabled
+            if ENABLE_KNOWLEDGE_GRAPH:
+                return await analyze_post_for_knowledge_graph(update, context)
+
         except Exception as e:
             logger.error(f"Failed to save post: {e}")
             await query.edit_message_text(
@@ -525,26 +544,28 @@ async def add_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Analyze the saved post for entities and theses."""
+    """Analyze the saved post for entities and theses.
+
+    Works in both message and callback query contexts (quick save vs manual save).
+    """
     analyzer = get_analyzer()
 
     if not analyzer:
-        await update.message.reply_text(
-            "Send me another link anytime!"
-        )
+        await reply_text(update, "Send me another link anytime!")
         context.user_data.clear()
         return ConversationHandler.END
 
     # Check rate limit
     if not get_db().check_analysis_limit(ANALYSIS_CONFIG["max_daily_analysis"]):
-        await update.message.reply_text(
+        await reply_text(
+            update,
             "📊 Daily analysis limit reached. Post saved without knowledge graph analysis.\n\n"
             "Send me another link anytime!"
         )
         context.user_data.clear()
         return ConversationHandler.END
 
-    await update.message.reply_text("🔍 Analyzing for knowledge graph...")
+    await reply_text(update, "🔍 Analyzing for knowledge graph...")
 
     thread = context.user_data["thread"]
     content = thread.full_text
@@ -562,7 +583,8 @@ async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes
         context.user_data["analysis"] = analysis
 
         if not analysis.has_results:
-            await update.message.reply_text(
+            await reply_text(
+                update,
                 "No entities or theses detected in this post.\n\n"
                 "Send me another link anytime!"
             )
@@ -578,7 +600,8 @@ async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(
+        await reply_text(
+            update,
             f"📊 <b>Knowledge Graph Analysis:</b>\n\n"
             f"{analysis.to_display_text()}\n\n"
             f"Add these to your knowledge graph?",
@@ -590,7 +613,8 @@ async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes
 
     except Exception as e:
         logger.error(f"Knowledge graph analysis failed: {e}")
-        await update.message.reply_text(
+        await reply_text(
+            update,
             "Knowledge graph analysis failed. Post saved without links.\n\n"
             "Send me another link anytime!"
         )
