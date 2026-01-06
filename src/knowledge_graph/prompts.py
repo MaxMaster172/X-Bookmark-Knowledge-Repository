@@ -34,10 +34,10 @@ User notes: {notes}
 ## MULTILINGUAL SUPPORT
 - The post content may be in ANY language (Japanese, Korean, Chinese, etc.)
 - Analyze the content in its original language
-- Return entity names in their ORIGINAL LANGUAGE as they appear in the post
-- For well-known entities, also check if English aliases exist in the existing entities list
-- Thesis names should be in ENGLISH for consistency across the knowledge graph
+- Return entity names in ENGLISH (translate if needed)
+- Thesis names should be in ENGLISH
 - The contribution_summary should be in ENGLISH
+- All output should be in English for consistency across the knowledge graph
 
 Return valid JSON only (no markdown code blocks):
 {{
@@ -89,8 +89,7 @@ Notes: {notes}
 
 MULTILINGUAL: The post may be in any language (Japanese, Korean, Chinese, etc.).
 - Analyze content in its original language
-- Entity names: keep in original language
-- Thesis names and contribution_summary: use ENGLISH
+- ALL OUTPUT IN ENGLISH (translate entity names, theses, summaries)
 
 Return valid JSON only:
 {{
