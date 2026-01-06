@@ -201,12 +201,12 @@ class PostAnalyzer:
 
         entities = [
             e for e in data.get("entities", [])
-            if e.get("confidence", 0) >= min_entity_conf
+            if isinstance(e, dict) and e.get("confidence", 0) >= min_entity_conf
         ]
 
         theses = [
             t for t in data.get("theses", [])
-            if t.get("confidence", 0) >= min_thesis_conf
+            if isinstance(t, dict) and t.get("confidence", 0) >= min_thesis_conf
         ]
 
         # Limit new theses
