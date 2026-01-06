@@ -278,17 +278,30 @@ class PostAnalyzer:
             )
             created["categories"] += 1
 
+        # Fetch existing entities/theses for name-based lookup (don't trust Claude's IDs)
+        existing_entities = {e["name"].lower(): e["id"] for e in self.db.get_all_entities_with_aliases()}
+        existing_theses = {t["name"].lower(): t["id"] for t in self.db.get_all_theses()}
+
         # Process entities
         for entity in analysis.entities:
-            if entity.get("is_new"):
+            entity_name = entity.get("name", "")
+
+            # Look up by name first (Claude's IDs might be hallucinated)
+            entity_id = existing_entities.get(entity_name.lower())
+
+            if entity_id:
+                # Entity exists, just link it
+                pass
+            else:
+                # Create new entity
                 entity_id = self.db.create_entity(
-                    name=entity["name"],
+                    name=entity_name,
                     category_name=entity.get("category"),
                     description=entity.get("context"),
                 )
                 created["entities"] += 1
-            else:
-                entity_id = entity.get("existing_id")
+                # Add to lookup for future reference in this batch
+                existing_entities[entity_name.lower()] = entity_id
 
             if entity_id:
                 self.db.link_post_entity(
@@ -300,14 +313,23 @@ class PostAnalyzer:
 
         # Process theses
         for thesis in analysis.theses:
-            if thesis.get("is_new"):
+            thesis_name = thesis.get("name", "")
+
+            # Look up by name first (Claude's IDs might be hallucinated)
+            thesis_id = existing_theses.get(thesis_name.lower())
+
+            if thesis_id:
+                # Thesis exists, just link it
+                pass
+            else:
+                # Create new thesis
                 thesis_id = self.db.create_thesis(
-                    name=thesis["name"],
+                    name=thesis_name,
                     category=thesis.get("category", "general"),
                 )
                 created["theses"] += 1
-            else:
-                thesis_id = thesis.get("existing_id")
+                # Add to lookup for future reference in this batch
+                existing_theses[thesis_name.lower()] = thesis_id
 
             if thesis_id:
                 self.db.link_post_thesis(
@@ -318,20 +340,14 @@ class PostAnalyzer:
                 )
                 linked["theses"] += 1
 
-                # Link entities to thesis
+                # Link entities to thesis (use our name-based lookup)
                 for entity in analysis.entities:
-                    entity_id = entity.get("existing_id")
-                    if entity.get("is_new"):
-                        # Find the entity we just created by name
-                        entities = self.db.get_all_entities_with_aliases()
-                        for e in entities:
-                            if e["name"] == entity["name"]:
-                                entity_id = e["id"]
-                                break
+                    entity_name = entity.get("name", "")
+                    ent_id = existing_entities.get(entity_name.lower())
 
-                    if entity_id:
+                    if ent_id:
                         self.db.link_entity_thesis(
-                            entity_id=entity_id,
+                            entity_id=ent_id,
                             thesis_id=thesis_id,
                             role="subject",
                         )
