@@ -31,6 +31,14 @@ User notes: {notes}
 4. For new entities/theses, suggest appropriate categorization
 5. Keep confidence scores realistic - 0.9+ only for explicit, clear mentions
 
+## MULTILINGUAL SUPPORT
+- The post content may be in ANY language (Japanese, Korean, Chinese, etc.)
+- Analyze the content in its original language
+- Return entity names in their ORIGINAL LANGUAGE as they appear in the post
+- For well-known entities, also check if English aliases exist in the existing entities list
+- Thesis names should be in ENGLISH for consistency across the knowledge graph
+- The contribution_summary should be in ENGLISH
+
 Return valid JSON only (no markdown code blocks):
 {{
     "entities": [
@@ -78,6 +86,11 @@ Author: {author}
 Tags: {tags}
 Topics: {topics}
 Notes: {notes}
+
+MULTILINGUAL: The post may be in any language (Japanese, Korean, Chinese, etc.).
+- Analyze content in its original language
+- Entity names: keep in original language
+- Thesis names and contribution_summary: use ENGLISH
 
 Return valid JSON only:
 {{

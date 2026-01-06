@@ -535,6 +535,19 @@ async def analyze_post_for_knowledge_graph(update: Update, context: ContextTypes
 async def handle_analysis_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle Accept/Skip response for knowledge graph analysis."""
     query = update.callback_query
+
+    # Check if we've already processed this callback (prevents double-processing)
+    callback_id = query.id
+    processed_callbacks = context.user_data.get("processed_callbacks", set())
+    if callback_id in processed_callbacks:
+        await query.answer()  # Acknowledge but don't reprocess
+        return REVIEW_ANALYSIS  # Stay in same state
+
+    # Mark this callback as processed
+    processed_callbacks.add(callback_id)
+    context.user_data["processed_callbacks"] = processed_callbacks
+
+    # Answer the callback immediately to stop the "loading" state on button
     await query.answer()
 
     if query.data == "kg_skip":
@@ -556,6 +569,12 @@ async def handle_analysis_response(update: Update, context: ContextTypes.DEFAULT
             )
             context.user_data.clear()
             return ConversationHandler.END
+
+        # Show immediate feedback that we're processing
+        try:
+            await query.edit_message_text("⏳ Updating knowledge graph...")
+        except Exception:
+            pass  # Message might already be edited, continue anyway
 
         try:
             # Apply the analysis
