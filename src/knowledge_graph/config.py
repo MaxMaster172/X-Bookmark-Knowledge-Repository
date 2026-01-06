@@ -8,7 +8,7 @@ Cost controls and model settings for Claude API usage.
 ANALYSIS_CONFIG = {
     # Model selection
     "model": "claude-sonnet-4-20250514",
-    "max_tokens": 2000,
+    "max_tokens": 4000,  # Increased for posts with many entities
 
     # Confidence thresholds
     "min_entity_confidence": 0.6,  # Below this, don't auto-link

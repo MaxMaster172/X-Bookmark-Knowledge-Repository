@@ -154,11 +154,23 @@ class PostAnalyzer:
 
             raw_text = response.content[0].text.strip()
 
+            # Log response stats for debugging
+            stop_reason = response.stop_reason
+            if stop_reason == "max_tokens":
+                logger.warning(f"Response truncated due to max_tokens limit")
+                logger.debug(f"Truncated response: {raw_text[:500]}...")
+
             # Increment usage counter
             self.db.increment_analysis_count()
 
             # Parse JSON response
             result = self._parse_response(raw_text)
+
+            # Log if no results found (helpful for debugging)
+            if not result.has_results:
+                logger.warning(f"No entities/theses detected. Raw response length: {len(raw_text)}")
+                logger.debug(f"Raw response: {raw_text[:1000]}")
+
             return result
 
         except json.JSONDecodeError as e:
@@ -199,15 +211,25 @@ class PostAnalyzer:
         min_entity_conf = ANALYSIS_CONFIG["min_entity_confidence"]
         min_thesis_conf = ANALYSIS_CONFIG["min_thesis_confidence"]
 
+        raw_entities = data.get("entities", [])
+        raw_theses = data.get("theses", [])
+
         entities = [
-            e for e in data.get("entities", [])
+            e for e in raw_entities
             if isinstance(e, dict) and e.get("confidence", 0) >= min_entity_conf
         ]
 
         theses = [
-            t for t in data.get("theses", [])
+            t for t in raw_theses
             if isinstance(t, dict) and t.get("confidence", 0) >= min_thesis_conf
         ]
+
+        # Log filtering stats
+        if len(raw_entities) != len(entities) or len(raw_theses) != len(theses):
+            logger.info(
+                f"Filtered: {len(raw_entities)} -> {len(entities)} entities, "
+                f"{len(raw_theses)} -> {len(theses)} theses"
+            )
 
         # Limit new theses
         max_new = ANALYSIS_CONFIG["max_new_theses_per_post"]
