@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-03 (Phase 6 COMPLETE - Vercel Deployment)
+> Last updated: 2026-01-14 (Hybrid workflow implemented - Obsidian export complete)
 
 ## Goal
 
@@ -84,9 +84,24 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Integrated analysis flow into `tools/telegram_bot.py`
     - Accept/Skip UI for knowledge graph suggestions
     - Deployed to VPS and running
-- Now: [→] Phase 7b: Backfill & Remaining Features
+  - [x] Phase 7a-fix: Quick Save Knowledge Graph (2026-01-04)
+    - Added `reply_text()` helper for both message and callback query contexts
+    - Modified quick save flow to call `analyze_post_for_knowledge_graph()`
+    - Commit: `0bbeea8`
+  - [x] Phase 7a-cleanup: Deprecate Manual Save Flow (2026-01-04)
+    - Removed `add_tags`, `add_topics`, `add_notes` handlers
+    - Simplified to single "Archive" button (Claude handles categorization)
+    - Reduced conversation states from 7 to 4
+    - Commit: `93deeef`
+  - [x] Phase 7-hybrid: Obsidian Export Integration (2026-01-14)
+    - Created `scripts/export_to_obsidian.py` - exports posts to Obsidian Clippings folder
+    - Added `get_post_entities()`, `get_post_theses()`, `get_posts_since()` to SupabaseClient
+    - Enhanced `onboard-note` skill in Obsidian vault with Step 1.5 (bot detection seeds)
+    - Successfully exported 99 posts to `C:\Users\maxma\Obsidian\Clippings\X-Bookmark\`
+    - Frontmatter includes `detected_entities` and `detected_theses` with confidence scores
+- Now: [→] Phase 7b: Backfill existing posts (optional - most posts now have detections)
 - Remaining:
-  - [ ] Phase 7b: Backfill existing posts with entity/thesis detection
+  - [ ] Phase 7b: Backfill remaining posts without entity/thesis detection
   - [ ] Phase 7c: Synthesis engine (auto-regenerate thesis summaries)
   - [ ] Phase 7d: Knowledge graph visualization page
   - [ ] Phase 8: Research Sessions & Discovery
@@ -96,12 +111,15 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 
 - ~~**Rate limiting for chat**: What limits to control Claude API costs?~~ RESOLVED: 20 msg/hour client-side tracking
 - ~~UNCONFIRMED: Is the Telegram bot currently saving to files or already Supabase?~~ CONFIRMED: Now writes to Supabase only.
+- ~~**PENDING DECISION: Hybrid vs Obsidian-centered workflow?**~~ RESOLVED: Hybrid (Option A) chosen. Export script implemented. See `docs/OBSIDIAN_HYBRID_DESIGN.md` for rationale.
 
 ## Working Set
 
 ### Key Files
 - `docs/ARCHITECTURE.md` - Master architecture document (APPROVED)
 - `docs/THESIS_SYSTEM_DESIGN.md` - Thesis system design
+- `docs/OBSIDIAN_HYBRID_DESIGN.md` - Obsidian hybrid workflow analysis (IMPLEMENTED)
+- `scripts/export_to_obsidian.py` - Export posts to Obsidian vault with entity/thesis hints
 - `deploy/sql/001_initial_schema.sql` - Database schema
 - `src/supabase/client.py` - Supabase Python client
 - `src/vision/` - Image extraction module (Phase 3)
@@ -115,6 +133,28 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
 - Branch: `main`
 - Supabase URL: `https://yjjgtwydeoijxrewbisl.supabase.co`
 - Credentials file: `SUPABASE CREDENTIALS.txt` (gitignored)
+
+### VPS Operations (Hetzner)
+- **Host**: `debian-4gb-nbg1-1` (SSH as root)
+- **Bot path**: `/home/archivebot/X-Bookmark-Knowledge-Repository`
+- **Service**: `archivebot.service` (systemd)
+
+**After any git push affecting the bot:**
+```bash
+ssh root@<vps-ip>
+cd /home/archivebot/X-Bookmark-Knowledge-Repository
+git pull
+sudo systemctl restart archivebot
+sudo systemctl status archivebot  # verify running
+```
+
+**Useful commands:**
+```bash
+sudo systemctl status archivebot   # check status
+sudo systemctl restart archivebot  # restart after code changes
+sudo journalctl -u archivebot -f   # tail logs
+sudo journalctl -u archivebot -n 50  # last 50 log lines
+```
 
 ### Test Commands
 ```bash
@@ -170,11 +210,12 @@ Per `docs/ARCHITECTURE.md` Phase 2:
 
 ## Stats
 
-- **Total posts**: 27 (all migrated to Supabase)
+- **Total posts**: 99 (all in Supabase, exported to Obsidian)
 - **Unique authors**: Multiple (expanded from original 3)
 - **Database tables**: 12 (all schema applied)
 - **Embeddings**: 384-dimensional vectors on all posts
-- **VPS status**: Bot running with new Supabase code
+- **VPS status**: Bot running via systemd (`archivebot.service`) with Phase 7a code
+- **Obsidian export**: 99 posts in `C:\Users\maxma\Obsidian\Clippings\X-Bookmark\`
 
 ## Session Auto-Summary (2025-12-28T19:11:44.439Z)
 - Files changed: C

@@ -171,6 +171,26 @@ class SupabaseClient:
         result = self._client.table("posts").select("id", count="exact").execute()
         return result.count or 0
 
+    def get_posts_since(self, since: datetime) -> list[dict]:
+        """
+        Get posts archived after a given timestamp.
+
+        Args:
+            since: Only return posts archived after this datetime
+
+        Returns:
+            List of posts ordered by archived_at ascending
+        """
+        since_str = since.isoformat() if isinstance(since, datetime) else since
+        result = (
+            self._client.table("posts")
+            .select("*")
+            .gt("archived_at", since_str)
+            .order("archived_at", desc=False)
+            .execute()
+        )
+        return result.data or []
+
     # ===========================
     # MEDIA OPERATIONS
     # ===========================
@@ -458,6 +478,32 @@ class SupabaseClient:
         self._client.table("post_entities").upsert(data).execute()
         logger.debug(f"Linked post {post_id[:8]}... to entity {entity_id[:8]}...")
 
+    def get_post_entities(self, post_id: str) -> list[dict]:
+        """
+        Get entities linked to a post with confidence scores.
+
+        Returns list of dicts with: name, category, confidence
+        """
+        # Join post_entities -> entities -> entity_categories
+        result = (
+            self._client.table("post_entities")
+            .select("confidence, entities(name, entity_categories(name))")
+            .eq("post_id", post_id)
+            .execute()
+        )
+
+        entities = []
+        for pe in result.data or []:
+            entity_data = pe.get("entities", {})
+            if entity_data:
+                category_data = entity_data.get("entity_categories", {})
+                entities.append({
+                    "name": entity_data.get("name"),
+                    "category": category_data.get("name") if category_data else None,
+                    "confidence": pe.get("confidence", 1.0),
+                })
+        return entities
+
     # ===========================
     # THESIS OPERATIONS
     # ===========================
@@ -519,6 +565,31 @@ class SupabaseClient:
         # Use upsert to handle duplicates gracefully
         self._client.table("post_theses").upsert(data).execute()
         logger.debug(f"Linked post {post_id[:8]}... to thesis {thesis_id[:8]}...")
+
+    def get_post_theses(self, post_id: str) -> list[dict]:
+        """
+        Get theses linked to a post with contribution summaries.
+
+        Returns list of dicts with: name, category, confidence, contribution
+        """
+        result = (
+            self._client.table("post_theses")
+            .select("confidence, contribution, theses(name, category)")
+            .eq("post_id", post_id)
+            .execute()
+        )
+
+        theses = []
+        for pt in result.data or []:
+            thesis_data = pt.get("theses", {})
+            if thesis_data:
+                theses.append({
+                    "name": thesis_data.get("name"),
+                    "category": thesis_data.get("category"),
+                    "confidence": pt.get("confidence", 1.0),
+                    "contribution": pt.get("contribution"),
+                })
+        return theses
 
     def link_entity_thesis(
         self,
