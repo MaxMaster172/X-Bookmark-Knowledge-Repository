@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-14 (Hybrid workflow implemented - Obsidian export complete)
+> Last updated: 2026-01-15 (Phase 7d Session 1 complete - Knowledge Graph Visualization)
 
 ## Goal
 
@@ -99,11 +99,36 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Enhanced `onboard-note` skill in Obsidian vault with Step 1.5 (bot detection seeds)
     - Successfully exported 99 posts to `C:\Users\maxma\Obsidian\Clippings\X-Bookmark\`
     - Frontmatter includes `detected_entities` and `detected_theses` with confidence scores
-- Now: [→] Phase 7b: Backfill existing posts (optional - most posts now have detections)
+    - Obsidian workflow tested and validated by user (2026-01-15)
+  - [x] Test & Lint Fixes (2026-01-15)
+    - Fixed credential validation test (module reload for env var clearing)
+    - React 19 hydration fixes: replaced useState+useEffect with useSyncExternalStore
+    - Removed unused imports/state (PostMedia, entities.ts)
+    - All 12 Python tests passing, web lint clean, build successful
+    - Commit: `c88e389`
+- Now: [→] Phase 7d: Knowledge Graph Visualization (SESSION 1 COMPLETE)
+  - Plan file: `~/.claude/plans/pure-tumbling-mango.md`
+  - Library: `react-force-graph-2d` (React-native, WebGL-accelerated)
+  - 3 interaction modes (incremental build):
+    - Mode C: Selection Panel (sidebar shows posts on click)
+    - Mode B: Expandable Nodes (posts appear around clicked node)
+    - Mode A: Semantic Zoom (zoom level controls visibility)
+  - 7 implementation phases across 4 sessions
+  - [x] Session 1: Phases 1-2 (Foundation + Theming) - COMPLETE
+    - Created `/graph` page with force-directed visualization
+    - Files: `web/src/app/graph/page.tsx`, `GraphClient.tsx`
+    - Components: `KnowledgeGraph.tsx`, `GraphLegend.tsx`, `useGraphTheme.ts`
+    - Types: `web/src/types/graph.ts`
+    - Queries: `web/src/lib/queries/graph.ts`
+    - Navigation: Added "Graph" link to Header
+    - Theme support: 4 themes (light, dark, sepia, nord)
+    - Build: lint + build passing
+  - [ ] Session 2: Phases 3-4 (Mode C + Controls)
+  - [ ] Session 3: Phase 5 (Mode B)
+  - [ ] Session 4: Phases 6-7 (Mode A + Polish)
 - Remaining:
   - [ ] Phase 7b: Backfill remaining posts without entity/thesis detection
   - [ ] Phase 7c: Synthesis engine (auto-regenerate thesis summaries)
-  - [ ] Phase 7d: Knowledge graph visualization page
   - [ ] Phase 8: Research Sessions & Discovery
   - [ ] Phase 9: Cleanup & Documentation
 

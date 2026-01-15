@@ -12,6 +12,7 @@ const navItems = [
   { href: "/recent", label: "Recent" },
   { href: "/entities", label: "Entities" },
   { href: "/theses", label: "Theses" },
+  { href: "/graph", label: "Graph" },
 ];
 
 export function Header() {
