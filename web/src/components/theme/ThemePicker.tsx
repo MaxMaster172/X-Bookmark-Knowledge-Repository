@@ -1,10 +1,19 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { themes, type Theme } from "./ThemeProvider";
 import { cn } from "@/lib/utils";
+
+// For hydration-safe mounting detection
+const emptySubscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
+}
 
 const themeConfig: Record<
   Theme,
@@ -34,11 +43,7 @@ const themeConfig: Record<
 
 export function ThemePicker() {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useIsMounted();
 
   if (!mounted) {
     return (

@@ -1,6 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type {
-  Entity,
   EntityCategory,
   EntityWithCategory,
   EntityWithRelations,

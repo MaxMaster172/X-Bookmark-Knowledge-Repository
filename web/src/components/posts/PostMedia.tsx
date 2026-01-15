@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -18,7 +17,6 @@ const categoryIcons: Record<string, string> = {
 };
 
 export function PostMedia({ media, compact = false }: PostMediaProps) {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   if (!media || media.length === 0) return null;
 
@@ -49,7 +47,6 @@ export function PostMedia({ media, compact = false }: PostMediaProps) {
                 compact ? "aspect-video" : "aspect-[4/3]",
                 imageMedia.length === 3 && index === 0 && "row-span-2 aspect-[3/4]"
               )}
-              onClick={() => setSelectedIndex(index)}
             >
               {item.url && (
                 <Image

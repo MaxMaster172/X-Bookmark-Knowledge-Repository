@@ -212,15 +212,19 @@ class TestCredentialHandling:
 
     def test_missing_credentials_raises_error(self):
         """Test that missing credentials raise an appropriate error."""
-        from src.supabase.client import SupabaseClient
+        import importlib
+        import src.supabase.client as client_module
 
         # Temporarily clear env vars
         original_url = os.environ.pop("SUPABASE_URL", None)
         original_key = os.environ.pop("SUPABASE_SERVICE_KEY", None)
 
         try:
+            # Reload module to clear cached credentials
+            importlib.reload(client_module)
+
             with pytest.raises(ValueError) as exc_info:
-                SupabaseClient(url=None, key=None)
+                client_module.SupabaseClient(url=None, key=None)
 
             assert "credentials required" in str(exc_info.value).lower()
 
@@ -230,6 +234,8 @@ class TestCredentialHandling:
                 os.environ["SUPABASE_URL"] = original_url
             if original_key:
                 os.environ["SUPABASE_SERVICE_KEY"] = original_key
+            # Reload module to restore cached credentials
+            importlib.reload(client_module)
 
 
 if __name__ == "__main__":
