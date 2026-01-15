@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-15 (Phase 7d Session 2 complete - Mode C + Controls)
+> Last updated: 2026-01-15 (Phase 7d Session 3 complete - Mode B Expand)
 
 ## Goal
 
@@ -106,7 +106,7 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Removed unused imports/state (PostMedia, entities.ts)
     - All 12 Python tests passing, web lint clean, build successful
     - Commit: `c88e389`
-- Now: [→] Phase 7d: Knowledge Graph Visualization (SESSION 1 COMPLETE)
+- Now: [→] Phase 7d: Knowledge Graph Visualization (SESSION 3 COMPLETE)
   - Plan file: `~/.claude/plans/pure-tumbling-mango.md`
   - Library: `react-force-graph-2d` (React-native, WebGL-accelerated)
   - 3 interaction modes (incremental build):
@@ -130,8 +130,14 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Zoom controls (in/out/reset), category filters, mode tabs
     - Selected node visual highlight
     - Build: lint + build passing
-  - [→] Session 3: Phase 5 (Mode B)
-  - [ ] Session 4: Phases 6-7 (Mode A + Polish)
+  - [x] Session 3: Phase 5 (Mode B - Expand) - COMPLETE
+    - New hook: `useExpandableGraph.ts` for expansion state management
+    - Click entity/thesis in expand mode → posts appear as child nodes
+    - Click post node → opens in new tab
+    - Fixed hydration mismatch in GraphFilters (useSyncExternalStore)
+    - Fixed auto-zoom on data change (only zoom on initial load)
+    - Commit: `8bc1f1e`
+  - [→] Session 4: Phases 6-7 (Mode A + Polish)
 - Remaining:
   - [ ] Phase 7b: Backfill remaining posts without entity/thesis detection
   - [ ] Phase 7c: Synthesis engine (auto-regenerate thesis summaries)
