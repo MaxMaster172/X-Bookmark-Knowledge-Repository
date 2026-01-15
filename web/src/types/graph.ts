@@ -1,4 +1,6 @@
-export type NodeType = "entity" | "thesis";
+export type NodeType = "entity" | "thesis" | "post";
+
+export type EdgeType = "entity-thesis" | "entity-post" | "thesis-post";
 
 export interface GraphNode {
   id: string;
@@ -9,6 +11,8 @@ export interface GraphNode {
   size: number;
   entityId?: string;
   thesisId?: string;
+  postId?: string;
+  parentNodeId?: string; // For post nodes, tracks which node they expanded from
   // Runtime properties added by force-graph
   x?: number;
   y?: number;
@@ -19,7 +23,7 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
-  type: "entity-thesis";
+  type: EdgeType;
   role?: string;
   weight: number;
 }

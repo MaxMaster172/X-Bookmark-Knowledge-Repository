@@ -9,6 +9,7 @@ import { GraphSidebar } from "@/components/graph/GraphSidebar";
 import { GraphControls } from "@/components/graph/GraphControls";
 import { GraphFilters } from "@/components/graph/GraphFilters";
 import { ModeSwitcher, type GraphMode } from "@/components/graph/ModeSwitcher";
+import { useExpandableGraph } from "@/components/graph/useExpandableGraph";
 
 interface GraphClientProps {
   data: GraphData;
@@ -42,16 +43,29 @@ export function GraphClient({ data, categories }: GraphClientProps) {
   const [mode, setMode] = useState<GraphMode>("panel");
   const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
 
+  // Expandable graph state management
+  const { graphData, expandedNodes, toggleNodeExpansion, isLoading: isExpandLoading } = useExpandableGraph({
+    baseData: data,
+  });
+
   // Handle node click based on current mode
   const handleNodeClick = useCallback(
     (node: GraphNode) => {
       if (mode === "panel") {
         // Toggle selection: deselect if clicking the same node
         setSelectedNode((prev) => (prev?.id === node.id ? null : node));
+      } else if (mode === "expand") {
+        // Post nodes: open in new tab
+        if (node.type === "post" && node.postId) {
+          window.open(`/post/${node.postId}`, "_blank");
+          return;
+        }
+        // Entity/thesis nodes: toggle expansion (show/hide posts)
+        toggleNodeExpansion(node);
       }
       // Other modes will be implemented in future phases
     },
-    [mode]
+    [mode, toggleNodeExpansion]
   );
 
   // Close sidebar
@@ -119,11 +133,13 @@ export function GraphClient({ data, categories }: GraphClientProps) {
         <div className="flex-1 relative">
           <KnowledgeGraph
             ref={graphRef}
-            data={data}
+            data={graphData}
             categories={categories}
             selectedNodeId={selectedNode?.id}
             onNodeClick={handleNodeClick}
             visibleCategories={visibleCategories.size > 0 ? visibleCategories : null}
+            expandedNodes={expandedNodes}
+            isExpandLoading={isExpandLoading}
           />
 
           {/* Zoom controls overlay */}

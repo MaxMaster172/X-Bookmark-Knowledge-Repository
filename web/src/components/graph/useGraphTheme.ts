@@ -9,6 +9,7 @@ const THEME_COLORS = {
   light: {
     entity: "#3b82f6", // blue-500
     thesis: "#8b5cf6", // violet-500
+    post: "#9ca3af", // gray-400 (muted)
     link: "rgba(0, 0, 0, 0.15)",
     background: "#ffffff",
     categories: [
@@ -22,6 +23,7 @@ const THEME_COLORS = {
   dark: {
     entity: "#60a5fa", // blue-400
     thesis: "#a78bfa", // violet-400
+    post: "#6b7280", // gray-500 (muted)
     link: "rgba(255, 255, 255, 0.15)",
     background: "#18181b",
     categories: [
@@ -35,6 +37,7 @@ const THEME_COLORS = {
   sepia: {
     entity: "#a16207", // amber-700
     thesis: "#854d0e", // yellow-800
+    post: "#a8a29e", // stone-400 (muted)
     link: "rgba(92, 64, 51, 0.2)",
     background: "#f5f0e6",
     categories: [
@@ -48,6 +51,7 @@ const THEME_COLORS = {
   nord: {
     entity: "#88c0d0", // nord8
     thesis: "#b48ead", // nord15
+    post: "#4c566a", // nord3 (muted)
     link: "rgba(216, 222, 233, 0.2)",
     background: "#2e3440",
     categories: [
@@ -72,6 +76,10 @@ export function useGraphTheme() {
     (node: GraphNode): string => {
       if (node.type === "thesis") {
         return colors.thesis;
+      }
+
+      if (node.type === "post") {
+        return colors.post;
       }
 
       // For entities, use category-based colors

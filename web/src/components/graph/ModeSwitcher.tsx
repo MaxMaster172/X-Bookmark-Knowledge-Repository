@@ -24,7 +24,7 @@ export function ModeSwitcher({ mode, onModeChange }: ModeSwitcherProps) {
           <PanelRight className="h-4 w-4 mr-1" />
           <span className="hidden sm:inline">Panel</span>
         </TabsTrigger>
-        <TabsTrigger value="expand" title="Expand mode: Click to show posts as nodes (coming soon)" disabled>
+        <TabsTrigger value="expand" title="Expand mode: Click to show posts as nodes">
           <Expand className="h-4 w-4 mr-1" />
           <span className="hidden sm:inline">Expand</span>
         </TabsTrigger>

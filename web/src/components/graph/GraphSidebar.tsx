@@ -29,6 +29,12 @@ export function GraphSidebar({ selectedNode, onClose }: GraphSidebarProps) {
       return;
     }
 
+    // Post nodes don't have associated posts to fetch
+    if (selectedNode.type === "post") {
+      setPosts([]);
+      return;
+    }
+
     const nodeId = selectedNode.entityId ?? selectedNode.thesisId;
     if (!nodeId) {
       setPosts([]);
@@ -38,7 +44,9 @@ export function GraphSidebar({ selectedNode, onClose }: GraphSidebarProps) {
     async function fetchPosts() {
       setIsLoading(true);
       try {
-        const fetchedPosts = await getNodePosts(selectedNode!.type, nodeId!);
+        // Type is guaranteed to be "entity" | "thesis" after the check above
+        const nodeType = selectedNode!.type as "entity" | "thesis";
+        const fetchedPosts = await getNodePosts(nodeType, nodeId!);
         setPosts(fetchedPosts);
       } catch (error) {
         console.error("Error fetching node posts:", error);

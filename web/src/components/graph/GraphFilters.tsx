@@ -1,6 +1,16 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useGraphTheme } from "./useGraphTheme";
+
+// For hydration-safe mounting detection
+const emptySubscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
+}
 
 interface GraphFiltersProps {
   categories: Array<{ id: string; name: string }>;
@@ -19,6 +29,7 @@ export function GraphFilters({
   onToggleAll,
 }: GraphFiltersProps) {
   const { getCategoryColor } = useGraphTheme();
+  const mounted = useIsMounted();
 
   // Check if all categories are visible (or none are explicitly hidden)
   const allVisible = visibleCategories.size === 0 || visibleCategories.size === categories.length;
@@ -53,7 +64,7 @@ export function GraphFilters({
               />
               <div
                 className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: getCategoryColor(category.id) }}
+                style={{ backgroundColor: mounted ? getCategoryColor(category.id) : "#888" }}
               />
               <span className="text-xs">{category.name}</span>
             </label>

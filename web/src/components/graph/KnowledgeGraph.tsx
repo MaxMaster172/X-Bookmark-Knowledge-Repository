@@ -13,6 +13,8 @@ interface KnowledgeGraphProps {
   selectedNodeId?: string | null;
   onNodeClick?: (node: GraphNode) => void;
   visibleCategories?: Set<string> | null;
+  expandedNodes?: Set<string>;
+  isExpandLoading?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface KnowledgeGraphRef {
 }
 
 export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>(
-  function KnowledgeGraph({ data, categories, selectedNodeId, onNodeClick, visibleCategories }, ref) {
+  function KnowledgeGraph({ data, categories, selectedNodeId, onNodeClick, visibleCategories, expandedNodes }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
@@ -61,6 +63,8 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
     const filteredNodes = data.nodes.filter((node) => {
       // Always show theses
       if (node.type === "thesis") return true;
+      // Always show post nodes (they are children of expanded nodes)
+      if (node.type === "post") return true;
       // Show entities that match visible categories or have no category
       if (!node.categoryId) return true;
       return visibleCategories.has(node.categoryId);
@@ -91,10 +95,13 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
-  // Center graph after initial render
+  // Center graph on initial mount only (not on data changes from expansion)
+  const initialZoomDone = useRef(false);
   useEffect(() => {
+    if (initialZoomDone.current) return;
     const timer = setTimeout(() => {
       graphRef.current?.zoomToFit(400, 50);
+      initialZoomDone.current = true;
     }, 500);
     return () => clearTimeout(timer);
   }, [data]);
@@ -103,9 +110,11 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
   const nodeCanvasObject = useCallback(
     (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const label = node.label;
-      const fontSize = node.type === "thesis" ? 12 / globalScale : 10 / globalScale;
-      const nodeSize = node.type === "thesis" ? 8 : 4;
+      const isPost = node.type === "post";
+      const fontSize = node.type === "thesis" ? 12 / globalScale : isPost ? 8 / globalScale : 10 / globalScale;
+      const nodeSize = node.type === "thesis" ? 8 : isPost ? 3 : 4;
       const isSelected = node.id === selectedNodeId;
+      const isExpanded = expandedNodes?.has(node.id);
 
       // Draw selection highlight ring
       if (isSelected) {
@@ -114,6 +123,17 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
         ctx.strokeStyle = "hsl(var(--primary))";
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+
+      // Draw expanded node indicator ring
+      if (isExpanded && !isPost) {
+        ctx.beginPath();
+        ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 3, 0, 2 * Math.PI);
+        ctx.strokeStyle = "hsl(var(--chart-2))";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
 
       // Draw node circle
@@ -129,8 +149,19 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
         ctx.stroke();
       }
 
+      // Draw dashed border for post nodes
+      if (isPost) {
+        ctx.strokeStyle = "rgba(128, 128, 128, 0.5)";
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([2, 2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       // Draw label if zoomed in enough or if node is selected
-      if (globalScale > 0.7 || isSelected) {
+      // Post nodes show labels only when zoomed in further
+      const labelZoomThreshold = isPost ? 1.2 : 0.7;
+      if (globalScale > labelZoomThreshold || isSelected) {
         ctx.font = `${isSelected ? "bold " : ""}${fontSize}px Sans-Serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -138,11 +169,14 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
         ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + nodeSize + fontSize);
       }
     },
-    [getNodeColor, selectedNodeId]
+    [getNodeColor, selectedNodeId, expandedNodes]
   );
 
   // Node hover tooltip
   const nodeLabel = useCallback((node: GraphNode) => {
+    if (node.type === "post") {
+      return `Post: ${node.label}`;
+    }
     const type = node.type === "thesis" ? "Thesis" : "Entity";
     const category = node.category ? ` (${node.category})` : "";
     return `${type}: ${node.label}${category}`;
@@ -173,7 +207,8 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
           nodeVal={(node) => (node as GraphNode).size}
           nodeCanvasObject={nodeCanvasObject}
           nodePointerAreaPaint={(node, color, ctx) => {
-            const nodeSize = (node as GraphNode).type === "thesis" ? 8 : 4;
+            const gNode = node as GraphNode;
+            const nodeSize = gNode.type === "thesis" ? 8 : gNode.type === "post" ? 3 : 4;
             ctx.beginPath();
             ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 2, 0, 2 * Math.PI);
             ctx.fillStyle = color;
