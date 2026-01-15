@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import type { GraphData, GraphNode } from "@/types/graph";
 import { useGraphTheme } from "./useGraphTheme";
@@ -10,14 +10,72 @@ import { Card } from "@/components/ui/card";
 interface KnowledgeGraphProps {
   data: GraphData;
   categories: Array<{ id: string; name: string }>;
+  selectedNodeId?: string | null;
+  onNodeClick?: (node: GraphNode) => void;
+  visibleCategories?: Set<string> | null;
 }
 
-export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
+/**
+ * Graph control methods exposed via ref
+ */
+export interface KnowledgeGraphRef {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+}
+
+export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>(
+  function KnowledgeGraph({ data, categories, selectedNodeId, onNodeClick, visibleCategories }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const { getNodeColor, getLinkColor, getBackgroundColor } = useGraphTheme();
+
+  // Expose zoom control methods via ref
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => {
+      if (graphRef.current) {
+        const currentZoom = graphRef.current.zoom();
+        graphRef.current.zoom(currentZoom * 1.5, 300);
+      }
+    },
+    zoomOut: () => {
+      if (graphRef.current) {
+        const currentZoom = graphRef.current.zoom();
+        graphRef.current.zoom(currentZoom / 1.5, 300);
+      }
+    },
+    resetZoom: () => {
+      graphRef.current?.zoomToFit(400, 50);
+    },
+  }));
+
+  // Filter nodes based on visible categories
+  const filteredData = useCallback(() => {
+    if (!visibleCategories || visibleCategories.size === 0) {
+      return data;
+    }
+
+    // Filter nodes
+    const filteredNodes = data.nodes.filter((node) => {
+      // Always show theses
+      if (node.type === "thesis") return true;
+      // Show entities that match visible categories or have no category
+      if (!node.categoryId) return true;
+      return visibleCategories.has(node.categoryId);
+    });
+
+    // Filter links to only include links between visible nodes
+    const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
+    const filteredLinks = data.links.filter(
+      (link) =>
+        visibleNodeIds.has(typeof link.source === "string" ? link.source : (link.source as GraphNode).id) &&
+        visibleNodeIds.has(typeof link.target === "string" ? link.target : (link.target as GraphNode).id)
+    );
+
+    return { nodes: filteredNodes, links: filteredLinks };
+  }, [data, visibleCategories]);
 
   // Track container dimensions
   useEffect(() => {
@@ -47,6 +105,16 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
       const label = node.label;
       const fontSize = node.type === "thesis" ? 12 / globalScale : 10 / globalScale;
       const nodeSize = node.type === "thesis" ? 8 : 4;
+      const isSelected = node.id === selectedNodeId;
+
+      // Draw selection highlight ring
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = "hsl(var(--primary))";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
 
       // Draw node circle
       ctx.beginPath();
@@ -61,16 +129,16 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
         ctx.stroke();
       }
 
-      // Draw label if zoomed in enough
-      if (globalScale > 0.7) {
-        ctx.font = `${fontSize}px Sans-Serif`;
+      // Draw label if zoomed in enough or if node is selected
+      if (globalScale > 0.7 || isSelected) {
+        ctx.font = `${isSelected ? "bold " : ""}${fontSize}px Sans-Serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = getNodeColor(node);
         ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + nodeSize + fontSize);
       }
     },
-    [getNodeColor]
+    [getNodeColor, selectedNodeId]
   );
 
   // Node hover tooltip
@@ -79,6 +147,14 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
     const category = node.category ? ` (${node.category})` : "";
     return `${type}: ${node.label}${category}`;
   }, []);
+
+  // Handle node click
+  const handleNodeClick = useCallback(
+    (node: GraphNode) => {
+      onNodeClick?.(node);
+    },
+    [onNodeClick]
+  );
 
   return (
     <Card className="relative overflow-hidden">
@@ -89,7 +165,7 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
       >
         <ForceGraph2D
           ref={graphRef}
-          graphData={data}
+          graphData={filteredData()}
           width={dimensions.width}
           height={dimensions.height}
           nodeId="id"
@@ -103,6 +179,7 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
             ctx.fillStyle = color;
             ctx.fill();
           }}
+          onNodeClick={handleNodeClick}
           linkSource="source"
           linkTarget="target"
           linkColor={() => getLinkColor()}
@@ -121,4 +198,4 @@ export function KnowledgeGraph({ data, categories }: KnowledgeGraphProps) {
       <GraphLegend categories={categories} />
     </Card>
   );
-}
+});

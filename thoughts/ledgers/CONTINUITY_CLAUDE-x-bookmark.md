@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-15 (Phase 7d Session 1 complete - Knowledge Graph Visualization)
+> Last updated: 2026-01-15 (Phase 7d Session 2 complete - Mode C + Controls)
 
 ## Goal
 
@@ -123,8 +123,14 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Navigation: Added "Graph" link to Header
     - Theme support: 4 themes (light, dark, sepia, nord)
     - Build: lint + build passing
-  - [ ] Session 2: Phases 3-4 (Mode C + Controls)
-  - [ ] Session 3: Phase 5 (Mode B)
+  - [x] Session 2: Phases 3-4 (Mode C + Controls) - COMPLETE
+    - New components: GraphSidebar, SelectedNodeInfo, PostList
+    - New components: GraphControls, GraphFilters, ModeSwitcher
+    - Click node → sidebar shows entity/thesis + related posts
+    - Zoom controls (in/out/reset), category filters, mode tabs
+    - Selected node visual highlight
+    - Build: lint + build passing
+  - [→] Session 3: Phase 5 (Mode B)
   - [ ] Session 4: Phases 6-7 (Mode A + Polish)
 - Remaining:
   - [ ] Phase 7b: Backfill remaining posts without entity/thesis detection

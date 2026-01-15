@@ -106,3 +106,87 @@ export async function getGraphCategories(): Promise<Array<{ id: string; name: st
 
   return (data as Array<{ id: string; name: string }>) ?? [];
 }
+
+/**
+ * Post summary type for graph sidebar
+ */
+export interface GraphPostSummary {
+  id: string;
+  url: string;
+  author_handle: string | null;
+  content: string | null;
+  archived_at: string;
+}
+
+/**
+ * Get posts associated with a node (entity or thesis)
+ */
+export async function getNodePosts(
+  nodeType: "entity" | "thesis",
+  nodeId: string,
+  limit = 20
+): Promise<GraphPostSummary[]> {
+  const supabase = getSupabaseClient();
+
+  if (nodeType === "entity") {
+    // Get posts linked to this entity via post_entities
+    const { data, error } = await supabase
+      .from("post_entities" as never)
+      .select(`
+        post:posts (
+          id,
+          url,
+          author_handle,
+          content,
+          archived_at
+        )
+      `)
+      .eq("entity_id", nodeId)
+      .limit(limit);
+
+    if (error) {
+      console.error("Error fetching entity posts:", error);
+      throw error;
+    }
+
+    // Flatten the nested structure
+    const posts = (data as Array<{ post: GraphPostSummary }> | null)
+      ?.map((row) => row.post)
+      .filter(Boolean) ?? [];
+
+    // Sort by archived_at descending
+    posts.sort((a, b) => new Date(b.archived_at).getTime() - new Date(a.archived_at).getTime());
+
+    return posts;
+  } else {
+    // Get posts linked to this thesis via post_theses
+    const { data, error } = await supabase
+      .from("post_theses" as never)
+      .select(`
+        post:posts (
+          id,
+          url,
+          author_handle,
+          content,
+          archived_at
+        )
+      `)
+      .eq("thesis_id", nodeId)
+      .limit(limit);
+
+    if (error) {
+      console.error("Error fetching thesis posts:", error);
+      throw error;
+    }
+
+    // Flatten the nested structure
+    const posts = (data as Array<{ post: GraphPostSummary }> | null)
+      ?.map((row) => row.post)
+      .filter(Boolean) ?? [];
+
+    // Sort by archived_at descending
+    posts.sort((a, b) => new Date(b.archived_at).getTime() - new Date(a.archived_at).getTime());
+
+    return posts;
+  }
+}

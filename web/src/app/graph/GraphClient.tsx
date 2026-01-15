@@ -1,8 +1,14 @@
 "use client";
 
+import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { GraphData } from "@/types/graph";
+import type { GraphData, GraphNode } from "@/types/graph";
+import type { KnowledgeGraphRef } from "@/components/graph/KnowledgeGraph";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GraphSidebar } from "@/components/graph/GraphSidebar";
+import { GraphControls } from "@/components/graph/GraphControls";
+import { GraphFilters } from "@/components/graph/GraphFilters";
+import { ModeSwitcher, type GraphMode } from "@/components/graph/ModeSwitcher";
 
 interface GraphClientProps {
   data: GraphData;
@@ -31,5 +37,120 @@ const KnowledgeGraph = dynamic(
 );
 
 export function GraphClient({ data, categories }: GraphClientProps) {
-  return <KnowledgeGraph data={data} categories={categories} />;
+  const graphRef = useRef<KnowledgeGraphRef>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [mode, setMode] = useState<GraphMode>("panel");
+  const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+
+  // Handle node click based on current mode
+  const handleNodeClick = useCallback(
+    (node: GraphNode) => {
+      if (mode === "panel") {
+        // Toggle selection: deselect if clicking the same node
+        setSelectedNode((prev) => (prev?.id === node.id ? null : node));
+      }
+      // Other modes will be implemented in future phases
+    },
+    [mode]
+  );
+
+  // Close sidebar
+  const handleCloseSidebar = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
+  // Zoom controls
+  const handleZoomIn = useCallback(() => {
+    graphRef.current?.zoomIn();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    graphRef.current?.zoomOut();
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    graphRef.current?.resetZoom();
+  }, []);
+
+  // Category filter handlers
+  const handleToggleCategory = useCallback(
+    (categoryId: string) => {
+      setVisibleCategories((prev) => {
+        const next = new Set(prev);
+        // If we're in "show all" mode (empty set), switch to showing only this category
+        if (prev.size === 0) {
+          // Start with all categories except this one
+          categories.forEach((cat) => {
+            if (cat.id !== categoryId) {
+              next.add(cat.id);
+            }
+          });
+        } else if (next.has(categoryId)) {
+          next.delete(categoryId);
+        } else {
+          next.add(categoryId);
+        }
+        return next;
+      });
+    },
+    [categories]
+  );
+
+  const handleToggleAll = useCallback((showAll: boolean) => {
+    if (showAll) {
+      // Empty set means show all
+      setVisibleCategories(new Set());
+    } else {
+      // Hide all - set to empty set that means "filter on"
+      setVisibleCategories(new Set(["__none__"]));
+    }
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      {/* Mode switcher above graph */}
+      <div className="flex items-center justify-between">
+        <ModeSwitcher mode={mode} onModeChange={setMode} />
+      </div>
+
+      {/* Graph and sidebar layout */}
+      <div className="flex gap-4">
+        {/* Graph container */}
+        <div className="flex-1 relative">
+          <KnowledgeGraph
+            ref={graphRef}
+            data={data}
+            categories={categories}
+            selectedNodeId={selectedNode?.id}
+            onNodeClick={handleNodeClick}
+            visibleCategories={visibleCategories.size > 0 ? visibleCategories : null}
+          />
+
+          {/* Zoom controls overlay */}
+          <GraphControls
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onResetZoom={handleResetZoom}
+          />
+
+          {/* Category filters overlay - positioned below legend on left */}
+          {categories.length > 0 && (
+            <div className="absolute bottom-4 left-4">
+              <GraphFilters
+                categories={categories}
+                visibleCategories={visibleCategories}
+                onToggleCategory={handleToggleCategory}
+                onToggleAll={handleToggleAll}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar for selected node */}
+        {selectedNode && (
+          <GraphSidebar selectedNode={selectedNode} onClose={handleCloseSidebar} />
+        )}
+      </div>
+    </div>
+  );
 }
