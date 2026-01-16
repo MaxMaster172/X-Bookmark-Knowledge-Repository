@@ -111,15 +111,21 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
     (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const label = node.label;
       const isPost = node.type === "post";
-      const fontSize = node.type === "thesis" ? 12 / globalScale : isPost ? 8 / globalScale : 10 / globalScale;
-      const nodeSize = node.type === "thesis" ? 8 : isPost ? 3 : 4;
       const isSelected = node.id === selectedNodeId;
       const isExpanded = expandedNodes?.has(node.id);
+
+      // Base sizes
+      const nodeSize = node.type === "thesis" ? 8 : isPost ? 3 : 4;
+      const baseFontSize = node.type === "thesis" ? 12 : isPost ? 8 : 10;
+      const fontSize = baseFontSize / globalScale;
+
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
 
       // Draw selection highlight ring
       if (isSelected) {
         ctx.beginPath();
-        ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 4, 0, 2 * Math.PI);
+        ctx.arc(x, y, nodeSize + 4, 0, 2 * Math.PI);
         ctx.strokeStyle = "hsl(var(--primary))";
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -128,7 +134,7 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
       // Draw expanded node indicator ring
       if (isExpanded && !isPost) {
         ctx.beginPath();
-        ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 3, 0, 2 * Math.PI);
+        ctx.arc(x, y, nodeSize + 3, 0, 2 * Math.PI);
         ctx.strokeStyle = "hsl(var(--chart-2))";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([3, 3]);
@@ -138,7 +144,7 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
 
       // Draw node circle
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize, 0, 2 * Math.PI);
+      ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
       ctx.fillStyle = getNodeColor(node);
       ctx.fill();
 
@@ -158,15 +164,16 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
         ctx.setLineDash([]);
       }
 
-      // Draw label if zoomed in enough or if node is selected
-      // Post nodes show labels only when zoomed in further
+      // Draw label based on zoom threshold
       const labelZoomThreshold = isPost ? 1.2 : 0.7;
-      if (globalScale > labelZoomThreshold || isSelected) {
+      const showLabel = globalScale > labelZoomThreshold || isSelected;
+
+      if (showLabel) {
         ctx.font = `${isSelected ? "bold " : ""}${fontSize}px Sans-Serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = getNodeColor(node);
-        ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + nodeSize + fontSize);
+        ctx.fillText(label, x, y + nodeSize + fontSize);
       }
     },
     [getNodeColor, selectedNodeId, expandedNodes]
@@ -190,6 +197,19 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
     [onNodeClick]
   );
 
+  // Node pointer area for click detection
+  const nodePointerAreaPaint = useCallback(
+    (node: object, color: string, ctx: CanvasRenderingContext2D) => {
+      const gNode = node as GraphNode;
+      const nodeSize = gNode.type === "thesis" ? 8 : gNode.type === "post" ? 3 : 4;
+      ctx.beginPath();
+      ctx.arc(gNode.x ?? 0, gNode.y ?? 0, nodeSize + 2, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    },
+    []
+  );
+
   return (
     <Card className="relative overflow-hidden">
       <div
@@ -206,14 +226,7 @@ export const KnowledgeGraph = forwardRef<KnowledgeGraphRef, KnowledgeGraphProps>
           nodeLabel={nodeLabel}
           nodeVal={(node) => (node as GraphNode).size}
           nodeCanvasObject={nodeCanvasObject}
-          nodePointerAreaPaint={(node, color, ctx) => {
-            const gNode = node as GraphNode;
-            const nodeSize = gNode.type === "thesis" ? 8 : gNode.type === "post" ? 3 : 4;
-            ctx.beginPath();
-            ctx.arc(node.x ?? 0, node.y ?? 0, nodeSize + 2, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-          }}
+          nodePointerAreaPaint={nodePointerAreaPaint}
           onNodeClick={handleNodeClick}
           linkSource="source"
           linkTarget="target"

@@ -63,7 +63,6 @@ export function GraphClient({ data, categories }: GraphClientProps) {
         // Entity/thesis nodes: toggle expansion (show/hide posts)
         toggleNodeExpansion(node);
       }
-      // Other modes will be implemented in future phases
     },
     [mode, toggleNodeExpansion]
   );

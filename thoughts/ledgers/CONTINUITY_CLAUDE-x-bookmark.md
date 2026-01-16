@@ -1,6 +1,6 @@
 # X-Bookmark Knowledge Repository - Continuity Ledger
 
-> Last updated: 2026-01-15 (Phase 7d Session 3 complete - Mode B Expand)
+> Last updated: 2026-01-16 (Phase 7d: Zoom mode removed, keeping Panel + Expand only)
 
 ## Goal
 
@@ -106,38 +106,31 @@ Transform Twitter bookmarks into a queryable personal knowledge base with:
     - Removed unused imports/state (PostMedia, entities.ts)
     - All 12 Python tests passing, web lint clean, build successful
     - Commit: `c88e389`
-- Now: [→] Phase 7d: Knowledge Graph Visualization (SESSION 3 COMPLETE)
-  - Plan file: `~/.claude/plans/pure-tumbling-mango.md`
-  - Library: `react-force-graph-2d` (React-native, WebGL-accelerated)
-  - 3 interaction modes (incremental build):
-    - Mode C: Selection Panel (sidebar shows posts on click)
-    - Mode B: Expandable Nodes (posts appear around clicked node)
-    - Mode A: Semantic Zoom (zoom level controls visibility)
-  - 7 implementation phases across 4 sessions
-  - [x] Session 1: Phases 1-2 (Foundation + Theming) - COMPLETE
-    - Created `/graph` page with force-directed visualization
-    - Files: `web/src/app/graph/page.tsx`, `GraphClient.tsx`
-    - Components: `KnowledgeGraph.tsx`, `GraphLegend.tsx`, `useGraphTheme.ts`
-    - Types: `web/src/types/graph.ts`
-    - Queries: `web/src/lib/queries/graph.ts`
-    - Navigation: Added "Graph" link to Header
-    - Theme support: 4 themes (light, dark, sepia, nord)
-    - Build: lint + build passing
-  - [x] Session 2: Phases 3-4 (Mode C + Controls) - COMPLETE
-    - New components: GraphSidebar, SelectedNodeInfo, PostList
-    - New components: GraphControls, GraphFilters, ModeSwitcher
-    - Click node → sidebar shows entity/thesis + related posts
-    - Zoom controls (in/out/reset), category filters, mode tabs
-    - Selected node visual highlight
-    - Build: lint + build passing
-  - [x] Session 3: Phase 5 (Mode B - Expand) - COMPLETE
-    - New hook: `useExpandableGraph.ts` for expansion state management
-    - Click entity/thesis in expand mode → posts appear as child nodes
-    - Click post node → opens in new tab
-    - Fixed hydration mismatch in GraphFilters (useSyncExternalStore)
-    - Fixed auto-zoom on data change (only zoom on initial load)
-    - Commit: `8bc1f1e`
-  - [→] Session 4: Phases 6-7 (Mode A + Polish)
+- Done:
+  - [x] Phase 7d: Knowledge Graph Visualization (ALL SESSIONS COMPLETE)
+    - Plan file: `~/.claude/plans/pure-tumbling-mango.md`
+    - Library: `react-force-graph-2d` (React-native, WebGL-accelerated)
+    - 3 interaction modes:
+      - Mode C: Selection Panel (sidebar shows posts on click)
+      - Mode B: Expandable Nodes (posts appear around clicked node)
+      - Mode A: Semantic Zoom (zoom level controls visibility)
+    - Session 1: Foundation + Theming
+    - Session 2: Mode C + Controls
+    - Session 3: Mode B - Expand
+    - Session 4: Mode A + Polish
+      - New hook: `useSemanticZoom.ts` for zoom-based visibility
+      - Zoom mode: zoomed out = theses only, medium = entities, zoomed in = posts
+      - ZoomIndicator shows current visibility level
+      - New components: GraphLoading.tsx, GraphError.tsx
+      - Error boundary: web/src/app/graph/error.tsx
+      - Build: lint + build passing
+- Done:
+  - [x] Phase 7d-cleanup: Removed Semantic Zoom Mode (2026-01-16)
+    - **Decision**: Zoom mode had persistent UX issues (transition bouncing, node scaling problems)
+    - **Action**: Removed zoom mode entirely, keeping only Panel + Expand modes
+    - **Deleted**: `useSemanticZoom.ts`
+    - **Simplified**: `ModeSwitcher.tsx` (2 modes), `GraphClient.tsx`, `KnowledgeGraph.tsx`
+    - **Status**: Lint + build passing, cleaner codebase
 - Remaining:
   - [ ] Phase 7b: Backfill remaining posts without entity/thesis detection
   - [ ] Phase 7c: Synthesis engine (auto-regenerate thesis summaries)
